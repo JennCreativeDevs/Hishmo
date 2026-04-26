@@ -1,0 +1,2636 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Hishmo — working demo (Somali language pack)</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+  :root {
+    --bg: #0e1116;
+    --panel: #161b22;
+    --panel-2: #1b2129;
+    --line: #2a313c;
+    --fg: #e7ecef;
+    --muted: #8b94a3;
+    --accent: #6ad7c1;
+    --accent-2: #c9b6ff;
+    --warn: #ffb86b;
+    --red: #ff8b6b;
+    --ok: #6ad77a;
+    --grey: #5a6473;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    background: var(--bg); color: var(--fg);
+    margin: 0; padding: 0;
+    font-family: ui-sans-serif, -apple-system, "Segoe UI", Inter, Helvetica, Arial, sans-serif;
+    /* Ensure full Somali diacritic + digraph rendering */
+    font-feature-settings: "liga", "kern";
+    -webkit-font-smoothing: antialiased;
+  }
+  body {
+    display: grid;
+    /* minmax(0, ...) ensures columns can shrink without being forced
+       wider by min-content of children. min-width:0 on each pane
+       reinforces this so long unbreakable content (code spans, buttons
+       with no spaces) doesn't push the layout. */
+    grid-template-columns: minmax(0, 380px) minmax(0, 1fr) minmax(0, 340px);
+    grid-template-rows: 1fr auto;
+    min-height: 100vh;
+  }
+  #glasses, #tabletop, #controls { min-width: 0; }
+
+  /* ----------- LEFT: Glasses HUD pane ----------- */
+  #glasses {
+    background: linear-gradient(180deg, #050708 0%, #0a0d12 100%);
+    border-right: 1px solid var(--line);
+    padding: 20px 18px 22px;
+    display: flex; flex-direction: column; gap: 12px;
+    overflow-y: auto;
+    max-height: calc(100vh - 36px);
+  }
+  #glasses h2 {
+    font-size: 10.5px; color: var(--muted);
+    margin: 0 0 4px;
+    letter-spacing: 0.14em; text-transform: uppercase; font-weight: 500;
+  }
+  #glasses h3 {
+    font-size: 10px; color: var(--muted);
+    margin: 8px 0 4px;
+    letter-spacing: 0.12em; text-transform: uppercase; font-weight: 500;
+  }
+
+  .glasses-frame {
+    border: 1px solid var(--line); border-radius: 14px;
+    background: #0a0d12; padding: 10px;
+  }
+
+  /* The HUD reproduces what the Rokid Glasses lower-third actually shows:
+     a single-color monochrome micro-LED waveguide. NO red/amber/green
+     severity paint — that is impossible on the device.
+     Severity is conveyed by SYMBOL (⛑ / ⚠ / ◇), bold/italic weight,
+     position, and brief flash animation. */
+  .hud {
+    background: rgba(106, 215, 193, 0.04);
+    border: 1px solid rgba(106, 215, 193, 0.20);
+    border-radius: 8px;
+    padding: 12px 14px;
+    color: var(--accent);
+    font-size: 12px; line-height: 1.5;
+    min-height: 180px;
+    position: relative;
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  }
+  .hud .indicator {
+    position: absolute; top: 8px; right: 12px;
+    font-size: 10px; color: var(--accent);
+  }
+  .hud .indicator::before {
+    content: "●"; color: var(--accent); margin-right: 5px; opacity: 0.5;
+  }
+  .hud .indicator.capturing { font-weight: 700; }
+  .hud .indicator.capturing::before {
+    opacity: 1; animation: hud-pulse 1.2s ease-in-out infinite;
+  }
+  .hud .caption {
+    color: var(--accent);
+    font-size: 13px; margin-bottom: 8px;
+    padding-right: 80px; line-height: 1.45;
+  }
+  /* All three severity classes render in the SAME color — symbol + weight do the work. */
+  .hud .signal { font-size: 11.5px; line-height: 1.55; color: var(--accent); }
+  .hud .signal.warn   { font-style: italic; }
+  .hud .signal.red    { font-weight: 700; animation: hud-flash 0.6s ease-out 1; }
+  .hud .signal.notice { font-weight: 400; }
+  .hud .signal .row { margin-top: 5px; }
+  @keyframes hud-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.35; }
+  }
+  @keyframes hud-flash {
+    0%   { background: rgba(106,215,193,0.18); }
+    100% { background: transparent; }
+  }
+  .hud-mono-note {
+    font-size: 9.5px; color: var(--muted);
+    margin-top: 6px; line-height: 1.5; text-align: right;
+    font-family: ui-monospace, monospace;
+  }
+
+  .brief {
+    background: var(--panel-2); border: 1px solid var(--line); border-radius: 6px;
+    padding: 10px 12px;
+    font-size: 11.5px; line-height: 1.55; color: var(--fg);
+  }
+  .brief .head { color: var(--accent-2); font-weight: 600; margin-bottom: 4px; }
+  .brief .row { color: var(--muted); font-size: 11px; }
+
+  /* HUD-only worker tools (notes, structured intake, verbatim, resources) */
+  .hud-tool {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 6px;
+    padding: 10px 12px;
+  }
+  .hud-tool .label {
+    font-size: 10px; color: var(--muted); letter-spacing: 0.1em;
+    text-transform: uppercase; font-weight: 500; margin-bottom: 6px;
+  }
+  textarea.hud-notes {
+    width: 100%; min-height: 78px;
+    background: var(--bg); border: 1px solid var(--line); color: var(--fg);
+    border-radius: 4px; padding: 8px 10px;
+    font-size: 11.5px; font-family: inherit; line-height: 1.5;
+    resize: vertical;
+  }
+  textarea.hud-notes:focus { outline: 1px solid var(--accent); border-color: var(--accent); }
+
+  .struct-grid {
+    display: grid; grid-template-columns: 1fr; gap: 6px;
+    margin-top: 4px;
+  }
+  .struct-row {
+    display: flex; align-items: center; gap: 8px;
+    font-size: 11.5px;
+  }
+  .struct-row label { color: var(--fg); }
+  .struct-row select, .struct-row input[type="text"] {
+    background: var(--bg); border: 1px solid var(--line); color: var(--fg);
+    padding: 5px 8px; border-radius: 4px; font-size: 11px; font-family: inherit;
+    flex: 1;
+  }
+
+  .chip-row { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+  .chip {
+    background: rgba(106,215,193,0.1);
+    border: 1px solid rgba(106,215,193,0.4);
+    color: var(--accent);
+    font-size: 10.5px;
+    padding: 2px 8px;
+    border-radius: 999px;
+    cursor: pointer;
+    font-family: ui-monospace, monospace;
+  }
+  .chip:hover { background: rgba(106,215,193,0.2); }
+  .chip.selected {
+    background: rgba(106,215,193,0.3);
+    color: #fff;
+  }
+  .chip.warn {
+    background: rgba(255,184,107,0.1);
+    border-color: rgba(255,184,107,0.4);
+    color: var(--warn);
+  }
+  .chip.warn.selected { background: rgba(255,184,107,0.3); color: #fff; }
+
+  .verbatim-list, .res-attached-list {
+    display: flex; flex-direction: column; gap: 6px;
+    margin-top: 4px;
+  }
+  .verbatim-item {
+    background: var(--bg); border: 1px solid var(--line); border-radius: 4px;
+    padding: 6px 8px; font-size: 11px;
+  }
+  .verbatim-item .so { color: var(--fg); font-weight: 500; }
+  .verbatim-item .en {
+    color: var(--muted); font-style: italic; margin-top: 3px; line-height: 1.45;
+  }
+  .verbatim-item .ts {
+    color: var(--muted); font-size: 9.5px; margin-top: 3px;
+    font-family: ui-monospace, monospace;
+  }
+
+  .res-attached-item {
+    background: var(--bg); border: 1px solid var(--line); border-radius: 4px;
+    padding: 6px 8px; font-size: 11px; line-height: 1.4;
+  }
+  .res-attached-item .name { color: var(--fg); font-weight: 600; }
+  .res-attached-item .meta { color: var(--muted); font-size: 10px; margin-top: 2px; }
+
+  /* Legend entries use SYMBOLS (⛑ / ⚠ / ◇), not colored dots — the
+     production HUD is monochrome and cannot render color severity. */
+  .legend-line {
+    font-size: 10.5px; color: var(--muted);
+    display: flex; align-items: baseline; gap: 8px; margin-top: 3px;
+    font-family: ui-monospace, monospace;
+  }
+  .legend-line .sym {
+    width: 14px; display: inline-block; text-align: center;
+    color: var(--accent);
+  }
+  .legend-line.red    .sym { font-weight: 700; }
+  .legend-line.warn   .sym { font-style: italic; }
+  .legend-line.notice .sym { opacity: 0.85; }
+
+  .privacy-note {
+    color: var(--muted); font-size: 10.5px;
+    line-height: 1.55; margin-top: auto;
+    padding: 8px 0 0;
+  }
+  .privacy-note em { color: var(--accent-2); font-style: normal; }
+
+  /* Live mic button */
+  .mic-btn {
+    display: inline-flex; align-items: center; gap: 6px;
+    background: rgba(106,215,193,0.08);
+    border: 1px solid rgba(106,215,193,0.35);
+    color: var(--accent); font-size: 11px; font-family: inherit;
+    padding: 5px 11px; border-radius: 999px; cursor: pointer;
+    transition: background 0.15s, border-color 0.15s;
+  }
+  .mic-btn:hover { background: rgba(106,215,193,0.18); }
+  .mic-btn.active {
+    background: rgba(255,139,107,0.15);
+    border-color: rgba(255,139,107,0.6);
+    color: var(--red);
+  }
+  .mic-btn.active .mic-dot {
+    animation: mic-pulse 1s ease-in-out infinite;
+  }
+  .mic-dot {
+    width: 7px; height: 7px; border-radius: 50%;
+    background: currentColor; flex-shrink: 0;
+  }
+  @keyframes mic-pulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.4; transform: scale(0.7); }
+  }
+  .mic-lang-select {
+    background: var(--bg); border: 1px solid var(--line); color: var(--muted);
+    font-size: 10px; font-family: inherit; padding: 3px 6px; border-radius: 4px;
+    cursor: pointer;
+  }
+
+  /* ----------- CENTER: Phone tabletop ----------- */
+  #tabletop {
+    background: var(--bg);
+    display: flex; flex-direction: column;
+    border-right: 1px solid var(--line);
+    overflow: hidden;
+  }
+  #tabletop .header {
+    padding: 14px 24px;
+    border-bottom: 1px solid var(--line);
+    display: flex; align-items: center; justify-content: space-between;
+    font-size: 12px; color: var(--muted);
+  }
+  #tabletop .header .title {
+    letter-spacing: 0.12em; text-transform: uppercase; font-weight: 500;
+  }
+  #tabletop .header .led {
+    display: inline-flex; align-items: center; gap: 8px;
+    background: rgba(90, 100, 115, 0.15);
+    padding: 6px 12px; border-radius: 999px;
+    font-size: 11px;
+  }
+  #tabletop .header .led .dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--grey);
+    box-shadow: 0 0 6px var(--grey);
+    transition: background 0.2s, box-shadow 0.2s;
+  }
+  #tabletop .header .led.green .dot { background: var(--ok); box-shadow: 0 0 8px var(--ok); }
+  #tabletop .header .led.red   .dot { background: var(--red);  box-shadow: 0 0 10px var(--red); }
+  #tabletop .header .led.grey  .dot { background: var(--grey); }
+
+  #tabletop .surface {
+    flex: 1;
+    min-height: 420px;     /* always render something even on tiny viewports */
+    display: grid; grid-template-rows: 1fr 1fr;
+    background:
+      radial-gradient(1200px 600px at 50% -10%, rgba(106,215,193,0.04), transparent 70%),
+      radial-gradient(1200px 600px at 50% 110%, rgba(201,182,255,0.04), transparent 70%),
+      var(--bg);
+    position: relative;
+    transition: grid-template-rows 0.25s ease;
+  }
+  #tabletop .half { min-width: 0; }
+  #tabletop .half .text { word-wrap: break-word; overflow-wrap: anywhere; }
+  /* Pre-session / closed mode: survivor side collapses to a thin strip
+     showing only the LED + sirta label. During LIVE state both halves
+     render content regardless of direction — the survivor needs to see
+     her own ASR transcript so she can verify nothing was missed, and the
+     worker needs to see the English MT. Same trust principle for both. */
+  #tabletop .surface.pre-session { grid-template-rows: 64px 1fr; }
+  .half.collapsed { padding: 12px 36px; overflow: hidden; }
+  .half.collapsed .text,
+  .half.collapsed .commands { display: none; }
+  .half.collapsed .label  { display: inline-block; margin-right: 12px; }
+  .half.collapsed .led-tag { display: inline-flex; }
+
+  /* Subtle direction indicator on each half — who is currently speaking.
+     Not severity color; just a soft frame around the side that's the
+     ORIGINATOR right now. Survivor never sees severity coloring. */
+  .half.speaking { background: rgba(106,215,193,0.025); }
+
+  /* ============================================================
+     STRICT MONOCHROME OVERRIDE — entire #glasses pane.
+     The left pane represents the glasses HUD (monochrome micro-LED
+     waveguide). NO red, no amber, no green, no purple anywhere here.
+     Only the accent color (single-color reading), muted/fg for text
+     hierarchy, and weight/symbol/animation for severity.
+     ============================================================ */
+  #glasses .brief .head           { color: var(--accent); }
+  #glasses .btn,
+  #glasses .btn.warn,
+  #glasses .btn.danger,
+  #glasses .btn.primary {
+    background: rgba(106,215,193,0.06);
+    border-color: rgba(106,215,193,0.30);
+    color: var(--accent);
+  }
+  #glasses .btn.danger { font-weight: 700; }      /* panic = bold + symbol carries weight */
+  #glasses .btn.warn   { font-style: italic; }
+  #glasses .chip,
+  #glasses .chip.warn,
+  #glasses .chip.danger,
+  #glasses .chip.selected {
+    background: rgba(106,215,193,0.06);
+    border-color: rgba(106,215,193,0.30);
+    color: var(--accent);
+  }
+  #glasses .chip.selected { background: rgba(106,215,193,0.20); color: #fff; }
+  #glasses .chip.warn.selected { background: rgba(106,215,193,0.20); color: #fff; }
+  #glasses code {
+    background: rgba(106,215,193,0.08);
+    color: var(--accent);
+  }
+  #glasses .glossary-output {
+    background: rgba(106,215,193,0.04);
+    border-color: rgba(106,215,193,0.25);
+    color: var(--accent);
+  }
+  #tabletop .half {
+    padding: 26px 36px;
+    display: flex; flex-direction: column; gap: 12px;
+    position: relative;
+    overflow: hidden;
+  }
+  #tabletop .half.survivor {
+    transform: rotate(180deg);
+    border-bottom: 1px dashed var(--line);
+  }
+  #tabletop .half .label {
+    font-size: 11px; letter-spacing: 0.18em; text-transform: uppercase;
+    color: var(--muted); font-weight: 500;
+  }
+  #tabletop .half .led-tag {
+    font-size: 11px; color: var(--muted);
+    display: inline-flex; align-items: center; gap: 6px;
+    margin-top: 2px;
+  }
+  #tabletop .half .led-tag::before {
+    content: ""; width: 7px; height: 7px; border-radius: 50%;
+    background: var(--grey); box-shadow: 0 0 6px var(--grey);
+    transition: background 0.2s, box-shadow 0.2s;
+  }
+  #tabletop .half.green .led-tag::before { background: var(--ok); box-shadow: 0 0 8px var(--ok); }
+  #tabletop .half.red   .led-tag::before { background: var(--red); box-shadow: 0 0 10px var(--red); }
+
+  #tabletop .half .text {
+    font-size: 26px; font-weight: 500;
+    line-height: 1.35; color: var(--fg);
+    margin-top: 8px;
+  }
+  #tabletop .half .text .small {
+    font-size: 14px; color: var(--muted);
+    margin-top: 10px; display: block;
+    line-height: 1.55; font-weight: 400;
+  }
+  #tabletop .half .commands {
+    display: flex; gap: 8px; flex-wrap: wrap;
+    margin-top: auto;
+  }
+  #tabletop .half .commands button {
+    background: rgba(106,215,193,0.1);
+    border: 1px solid rgba(106,215,193,0.4);
+    color: var(--accent);
+    padding: 8px 14px; border-radius: 8px;
+    font-size: 13px; font-family: inherit; cursor: pointer;
+  }
+  #tabletop .half .commands button:hover { background: rgba(106,215,193,0.2); }
+  #tabletop .half .commands button.danger {
+    color: var(--red);
+    border-color: rgba(255,139,107,0.4);
+    background: rgba(255,139,107,0.1);
+  }
+  #tabletop .half .commands button.danger:hover { background: rgba(255,139,107,0.2); }
+
+  /* Panic-clear flash overlay (visible wipe) */
+  .panic-overlay {
+    position: absolute; inset: 0;
+    background: rgba(255,139,107,0.85);
+    color: #1a0e0a;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 22px; font-weight: 700;
+    letter-spacing: 0.04em;
+    opacity: 0; pointer-events: none;
+    transition: opacity 0.18s;
+    z-index: 5;
+  }
+  .panic-overlay.show { opacity: 1; }
+
+  /* ----------- RIGHT: Demo controls ----------- */
+  #controls {
+    background: var(--panel);
+    border-left: 1px solid var(--line);
+    padding: 18px;
+    display: flex; flex-direction: column; gap: 10px;
+    overflow-y: auto;
+    max-height: calc(100vh - 36px);
+  }
+  #controls h2 {
+    font-size: 11px; color: var(--muted);
+    margin: 0;
+    letter-spacing: 0.12em; text-transform: uppercase; font-weight: 500;
+  }
+  #controls h3 {
+    font-size: 11px; color: var(--muted);
+    margin: 10px 0 4px;
+    letter-spacing: 0.08em; text-transform: uppercase; font-weight: 500;
+  }
+  #controls .state {
+    background: var(--bg); border: 1px solid var(--line); border-radius: 8px;
+    padding: 10px 12px;
+    font-family: ui-monospace, monospace;
+    font-size: 10.5px; line-height: 1.55;
+  }
+  #controls .state .row { display: flex; justify-content: space-between; padding: 1px 0; }
+  #controls .state .row .k { color: var(--muted); }
+  #controls .state .row .v { color: var(--fg); }
+
+  .btn {
+    background: var(--bg); border: 1px solid var(--line); color: var(--fg);
+    padding: 8px 11px; border-radius: 6px;
+    font-size: 12px; font-family: inherit;
+    cursor: pointer; text-align: left;
+    line-height: 1.4;
+  }
+  .btn:hover { border-color: var(--accent); }
+  .btn.primary { background: rgba(106,215,193,0.1); border-color: rgba(106,215,193,0.5); color: var(--accent); }
+  .btn.primary:hover { background: rgba(106,215,193,0.2); }
+  .btn.warn { background: rgba(255,184,107,0.08); border-color: rgba(255,184,107,0.4); color: var(--warn); }
+  .btn.danger { background: rgba(255,139,107,0.1); border-color: rgba(255,139,107,0.5); color: var(--red); }
+  .btn.danger:hover { background: rgba(255,139,107,0.2); }
+  .btn small {
+    display: block; color: var(--muted);
+    margin-top: 2px;
+    font-size: 10px; line-height: 1.45; font-weight: normal;
+  }
+
+  .group { display: flex; flex-direction: column; gap: 5px; }
+
+  .glossary-input {
+    width: 100%;
+    background: var(--bg); border: 1px solid var(--line); color: var(--fg);
+    padding: 8px 10px; border-radius: 6px;
+    font-size: 12px; font-family: inherit;
+  }
+  .glossary-output {
+    background: rgba(201,182,255,0.06);
+    border: 1px solid rgba(201,182,255,0.3);
+    color: var(--accent-2);
+    padding: 8px 10px; border-radius: 6px;
+    font-size: 11px; font-family: ui-monospace, monospace;
+    line-height: 1.55;
+    min-height: 40px;
+  }
+  .glossary-help {
+    color: var(--muted); font-size: 10px; line-height: 1.5;
+    margin-top: 4px;
+  }
+  .glossary-help code {
+    background: var(--bg); padding: 1px 4px; border-radius: 3px;
+    color: var(--accent);
+  }
+
+  .resource-card {
+    background: var(--bg); border: 1px solid var(--line); border-radius: 6px;
+    padding: 9px 10px;
+    font-size: 11px; line-height: 1.5;
+  }
+  .resource-card .name { font-weight: 600; color: var(--fg); }
+  .resource-card .meta { color: var(--muted); font-size: 10px; margin-top: 2px; }
+  .resource-card .desc { margin-top: 4px; color: var(--fg); font-size: 10.5px; }
+  .resource-card button.attach {
+    margin-top: 5px;
+    background: rgba(106,215,193,0.1); border: 1px solid rgba(106,215,193,0.4);
+    color: var(--accent); padding: 4px 9px; border-radius: 4px;
+    font-size: 10px; font-family: inherit; cursor: pointer;
+  }
+  .resource-card button.attach:hover { background: rgba(106,215,193,0.2); }
+  .resource-card button.attach.attached { color: var(--ok); border-color: rgba(106,215,122,0.5); }
+
+  /* ----------- Footer bar ----------- */
+  .footer-bar {
+    grid-column: 1 / 4;
+    background: #050708;
+    border-top: 1px solid var(--line);
+    padding: 8px 24px;
+    font-size: 10.5px; color: var(--muted);
+    display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap;
+  }
+  .footer-bar .badge {
+    background: rgba(255,184,107,0.1); color: var(--warn);
+    border: 1px solid rgba(255,184,107,0.3);
+    padding: 2px 8px; border-radius: 999px;
+    font-size: 10px;
+  }
+
+  /* ----------- Status banners (transient) ----------- */
+  .toast {
+    position: fixed; bottom: 56px; left: 50%;
+    transform: translateX(-50%);
+    background: var(--panel); color: var(--fg);
+    border: 1px solid var(--line); border-radius: 8px;
+    padding: 10px 16px;
+    font-size: 12px; line-height: 1.45;
+    box-shadow: 0 8px 28px rgba(0,0,0,0.55);
+    opacity: 0; pointer-events: none;
+    transition: opacity 0.2s;
+    z-index: 100;
+    max-width: 480px;
+  }
+  .toast.show { opacity: 1; }
+  .toast.ok    { border-color: rgba(106,215,122,0.5); color: var(--ok); }
+  .toast.warn  { border-color: rgba(255,184,107,0.5); color: var(--warn); }
+  .toast.error { border-color: rgba(255,139,107,0.5); color: var(--red); }
+
+  /* Narrow-viewport / iframe collapse: stack panes vertically so each
+     gets the full width and renders legibly. Bumped to 1280px because
+     squeezing 380 + 1fr + 340 below ~1180 produces a sub-100px center
+     column that breaks the tabletop. */
+  @media (max-width: 1280px) {
+    body { grid-template-columns: 1fr; }
+    #glasses, #tabletop, #controls {
+      border: none;
+      max-height: none;
+    }
+    #tabletop { min-height: 480px; }
+    #tabletop .surface { min-height: 380px; }
+    #glasses { order: 1; }
+    #tabletop { order: 2; }
+    #controls { order: 3; }
+  }
+</style>
+</head>
+<body>
+
+  <!-- =========================================================
+       LEFT: Glasses HUD pane (caseworker-only privacy boundary)
+       ========================================================= -->
+  <div id="glasses">
+    <h2>Glasses HUD</h2>
+
+    <div class="brief" id="brief-block">
+      <div class="head">Pre-session brief</div>
+      <div class="row" id="brief-line">Open Hishmo to load brief.</div>
+    </div>
+
+    <div class="glasses-frame">
+      <div class="hud" id="hud">
+        <div class="indicator no-record" id="hud-indicator">no record</div>
+        <div class="caption" id="hud-caption">Open Hishmo on the glasses to begin.</div>
+        <div class="signal notice" id="hud-signal">
+          App-launch is the session start. Touchpad short-tap = command mode.
+        </div>
+      </div>
+    </div>
+
+    <h3>Trigger legend</h3>
+    <div class="legend-line red">   <span class="sym">⛑</span> <span><strong>Direct</strong> · pause intake</span></div>
+    <div class="legend-line warn">  <span class="sym">⚠</span> <span><em>Probable cluster</em> · reflect tentatively</span></div>
+    <div class="legend-line notice"><span class="sym">◇</span> <span>Possible signal · keep listening</span></div>
+
+    <!-- ====== Visual divider — HUD ends, phone tools begin ====== -->
+    <div style="margin: 14px -18px 4px; height: 1px; background: var(--line); position: relative;">
+      <div style="position: absolute; top: -8px; left: 18px; background: var(--bg); padding: 0 8px; font-size: 9.5px; color: var(--muted); letter-spacing: 0.16em; text-transform: uppercase; font-family: ui-monospace, monospace;">
+        ▼ Caseworker tools
+      </div>
+    </div>
+
+    <h3>Caseworker actions</h3>
+    <div class="hud-tool" style="padding: 8px 10px;">
+      <div class="label" style="margin-bottom: 6px;">
+        Caseworker-only — never shown on phone tabletop
+      </div>
+      <div style="display:flex; gap:5px; flex-wrap:wrap;">
+        <button class="btn warn" onclick="captureVerbatim()" style="font-size:11px; padding:6px 9px;">
+          Hope, capture verbatim
+        </button>
+        <button class="btn" onclick="closeSession()" style="font-size:11px; padding:6px 9px;">
+          Hope, close session
+        </button>
+        <button class="btn danger" onclick="panicClear()" style="font-size:11px; padding:6px 9px;">
+          Hope, panic clear
+        </button>
+      </div>
+      <div style="font-size:10px; color: var(--muted); margin-top:6px; line-height:1.5;">
+        These never appear on the phone tabletop. The survivor sees no
+        capture/close/panic affordance — only the recording LED.
+      </div>
+    </div>
+
+    <h3>Survivor voice commands</h3>
+    <div class="hud-tool" style="padding: 8px 10px;">
+      <div class="label" style="margin-bottom: 6px;">
+        Survivor says in Somali — detected automatically
+      </div>
+      <div style="display:flex; gap:5px; flex-wrap:wrap;">
+        <button class="chip" onclick="survivorCommand('jooji')">jooji (pause)</button>
+        <button class="chip" onclick="survivorCommand('qof')">qof (interpreter)</button>
+        <button class="chip warn" onclick="survivorCommand('tirtir')">tirtir (wipe)</button>
+      </div>
+    </div>
+
+    <h3>Caseworker notes (HUD only)</h3>
+    <div class="hud-tool">
+      <div class="label" style="margin-bottom:6px;">
+        <code style="background:var(--bg);padding:1px 4px;border-radius:3px;color:var(--accent-2);">Hope, note: …</code> — speaks to add; or type below
+      </div>
+      <div style="display:flex; gap:6px; margin-bottom:8px; flex-wrap:wrap;">
+        <button class="chip" onclick="dictateNote()">
+          🎙 Hope, note
+        </button>
+        <button class="chip" onclick="dismissAllSuggestions()" style="opacity:0.7;">
+          dismiss all suggestions
+        </button>
+      </div>
+      <textarea
+        class="hud-notes"
+        id="caseworker-notes"
+        placeholder="type a note, or use 🎙 Hope, note to speak it"
+      ></textarea>
+    </div>
+
+    <div class="hud-tool" id="note-suggestions-tool" style="margin-top:8px;">
+      <div class="label">Trigger-suggested notes · confirm to append</div>
+      <div id="note-suggestions" class="verbatim-list">
+        <div class="verbatim-item" style="border-style:dashed; color: var(--muted);">
+          (none — fires when direct triggers hit or the cluster engine promotes)
+        </div>
+      </div>
+    </div>
+
+    <h3>Structured intake</h3>
+    <div class="hud-tool">
+      <div class="label" style="margin-bottom:6px;">
+        Fields are inferred from the conversation and surfaced for the caseworker to confirm
+      </div>
+
+      <div class="label">System-proposed tags · awaiting worker confirmation</div>
+      <div id="tag-suggestions" class="verbatim-list">
+        <div class="verbatim-item" style="border-style:dashed; color: var(--muted);">
+          (none — fires automatically when triggers + inferential clusters land)
+        </div>
+      </div>
+
+      <div class="label" style="margin-top:10px;">Today's goal</div>
+      <input type="text" class="glossary-input" id="goal-input"
+             placeholder="e.g., housing safety plan" style="width:100%; font-size:11.5px;">
+
+      <div class="label" style="margin-top:8px;">
+        Presenting issue (confirmed)
+        <span style="color: var(--muted); font-weight: normal; text-transform: none; letter-spacing: 0;">
+          · confirmed tags only · click to remove
+        </span>
+      </div>
+      <div class="chip-row" id="presenting-chips"></div>
+
+      <div class="label" style="margin-top:8px;">
+        Safety flags (confirmed)
+        <span style="color: var(--muted); font-weight: normal; text-transform: none; letter-spacing: 0;">
+          · confirmed tags only
+        </span>
+      </div>
+      <div class="chip-row" id="safety-chips"></div>
+    </div>
+
+    <h3>Verbatim quotes (capture ON only when red)</h3>
+    <div class="hud-tool">
+      <div class="label">Survivor quotes captured this session</div>
+      <div class="verbatim-list" id="verbatim-list">
+        <div class="verbatim-item" style="border-style:dashed; color: var(--muted);">
+          (no captures yet — press <em>capture verbatim</em> on worker side, then click an utterance)
+        </div>
+      </div>
+    </div>
+
+    <h3>Resources attached to case</h3>
+    <div class="hud-tool">
+      <div class="label">Caseworker chooses delivery method jointly with survivor · included in session export</div>
+      <div class="res-attached-list" id="res-attached-list">
+        <div class="res-attached-item" style="border-style:dashed; color: var(--muted);">
+          (none — use "Hope, resources for…" in the demo controls pane to look up and attach)
+        </div>
+      </div>
+    </div>
+
+    <div class="privacy-note">
+      Glasses HUD mocks the Rokid Glasses lower-third. The phone holds all PHI.<br>
+      <em>Honor mode:</em> caseworker notes, structured fields, verbatim quotes,
+      and attached resources <strong>never appear on the phone tabletop</strong>.
+    </div>
+  </div>
+
+  <!-- =========================================================
+       CENTER: Phone tabletop (split-screen · survivor + worker)
+       ========================================================= -->
+  <div id="tabletop">
+    <div class="header">
+      <div class="title">Phone — tabletop split-screen</div>
+      <div class="led grey" id="phone-led">
+        <span class="dot"></span>
+        <span id="phone-led-label">stand-by</span>
+      </div>
+    </div>
+    <div class="surface">
+
+      <!--
+        Survivor side (rotated 180°)
+        Renders ONLY when speakingDirection === "worker_to_survivor".
+        Otherwise collapsed — survivor doesn't need to read her own
+        Somali back to herself, and we don't surface anything that could
+        signal severity escalation.
+        FUTURE: resource-acceptance affordances (Haa/Maya in response to
+        a worker offer) belong here when the worker speaks an offer.
+      -->
+      <div class="half survivor green" id="survivor-half">
+        <div class="label" style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:6px;">
+          <span>Soomaali · phone faces client</span>
+          <div style="display:flex; align-items:center; gap:6px;">
+            <select class="mic-lang-select" id="survivor-mic-lang" onchange="state.survivorMicLang=this.value">
+              <option value="so-SO">so · Somali</option>
+              <option value="en-US">en · English (sim)</option>
+            </select>
+            <button class="mic-btn" id="survivor-mic-btn" onclick="toggleMic('survivor')" title="Client live mic">
+              <span class="mic-dot"></span>
+              <span id="survivor-mic-label">client mic</span>
+            </button>
+          </div>
+        </div>
+        <div class="led-tag" id="survivor-led">sirta waa la ilaaliyaa</div>
+        <div class="text" id="survivor-text">
+          Soo dhowoow.
+          <span class="small">
+            Hishmo wuxuu diyaar u yahay inuu ku caawiyo. Cag taabo
+            <strong>Bilow</strong> si aad u dhageysato sharcigaaga sirnimada.
+          </span>
+        </div>
+      </div>
+
+      <!--
+        Worker side (upright) — live English caption only, plus the
+        direction control. Severity-side decisions (capture verbatim,
+        close session, panic clear) live on the glasses HUD pane, NOT
+        here. The survivor must not see worker decisions about severity.
+      -->
+      <div class="half worker" id="worker-half">
+        <div class="label" style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:6px;">
+          <span>English · phone faces caseworker · live MT</span>
+          <div style="display:flex; align-items:center; gap:6px;">
+            <select class="mic-lang-select" id="worker-mic-lang" onchange="state.workerMicLang=this.value">
+              <option value="en-US">en · English</option>
+              <option value="so-SO">so · Somali</option>
+            </select>
+            <button class="mic-btn" id="worker-mic-btn" onclick="toggleMic('worker')" title="Worker live mic">
+              <span class="mic-dot"></span>
+              <span id="worker-mic-label">worker mic</span>
+            </button>
+          </div>
+        </div>
+        <div class="text" id="worker-text">
+          Welcome.
+          <span class="small">
+            Press <strong>Begin consent flow</strong> in the controls pane to start.
+            The phone speaker plays the Somali consent script; confirm
+            <strong>"consent given"</strong> before any translation begins.
+          </span>
+        </div>
+        <div class="commands">
+          <button onclick="workerSpeak()" id="speak-btn">Hope, speak to survivor</button>
+          <span style="color:var(--muted); font-size:10.5px; align-self:center; margin-left:6px;">
+            (cycles canned worker turns · split-screen activates)
+          </span>
+        </div>
+      </div>
+
+      <!-- Panic-clear flash -->
+      <div class="panic-overlay" id="panic-overlay">PANIC CLEAR · WIPING…</div>
+    </div>
+  </div>
+
+  <!-- =========================================================
+       RIGHT: Demo controls (drives the demo deterministically)
+       ========================================================= -->
+  <div id="controls">
+    <h2>Demo controls</h2>
+    <div class="state" id="state-panel">
+      <div class="row"><span class="k">flow</span><span class="v" id="state-flow">idle</span></div>
+      <div class="row"><span class="k">recording</span><span class="v" id="state-recording">none</span></div>
+      <div class="row"><span class="k">cluster</span><span class="v" id="state-cluster">0 inferential / 0 direct</span></div>
+      <div class="row"><span class="k">tier</span><span class="v" id="state-tier">background</span></div>
+      <div class="row"><span class="k">UUID</span><span class="v" id="state-uuid">—</span></div>
+    </div>
+
+    <h3>1 · Session start</h3>
+    <div class="group">
+      <button class="btn primary" onclick="beginConsent()">Begin consent flow</button>
+      <button class="btn" onclick="confirmConsent()">Mark "consent given"</button>
+    </div>
+
+    <h3>2 · Survivor utterances</h3>
+    <div class="group" id="utterance-list"></div>
+
+    <h3>3 · Glossary intercept · English → functional Somali</h3>
+    <input class="glossary-input" id="glossary-input"
+           placeholder="type: consent / confidential / psychological abuse / restraining order"
+           oninput="renderGlossary()">
+    <div class="glossary-output" id="glossary-output">(nothing yet)</div>
+    <div class="glossary-help">
+      These rewrites run before translation — the survivor hears a culturally accurate rendering, not a literal one. Try
+      <code>consent</code>, <code>confidential</code>, <code>psychological abuse</code>,
+      <code>restraining order</code>.
+    </div>
+
+    <h3>4 · Resource lookup</h3>
+    <div class="group">
+      <button class="btn" onclick="lookupResources('housing')">Hope, resources for housing</button>
+      <button class="btn" onclick="lookupResources('food')">Hope, resources for food</button>
+      <button class="btn" onclick="lookupResources('legal')">Hope, resources for legal</button>
+      <button class="btn" onclick="lookupResources('medical')">Hope, resources for medical</button>
+      <button class="btn" onclick="lookupResources('somali_community')">Hope, resources Somali community</button>
+    </div>
+    <div id="resource-output" class="group" style="margin-top:8px;"></div>
+
+    <h3>5 · Reset</h3>
+    <button class="btn danger" onclick="resetDemo()">Reset demo state</button>
+  </div>
+
+  <!-- Persistent footer banner -->
+  <div class="footer-bar">
+    <span>Hishmo · Somali language pack · browser demo</span>
+    <span><span class="badge">demo</span> all processing runs locally · no cloud</span>
+  </div>
+
+  <!-- Toast -->
+  <div class="toast" id="toast"></div>
+
+  <!-- jsPDF (CDN-loaded once at page load; required for client-side PDF export) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"
+          referrerpolicy="no-referrer"></script>
+
+  <!-- pack-data.js + pdf-export.js are INLINED below so the demo has zero
+       relative-path dependencies and works in any iframe / file:// context.
+       The standalone files at demo/pack-data.js and demo/pdf-export.js are
+       kept for the Kotlin tests to reference as the source-of-truth mirror. -->
+  <script>
+/* ============================================================
+   Hishmo demo — Somali language pack data (INLINED · keep in sync
+   with demo/pack-data.js · the four canonical glossary intercepts
+   must stay byte-identical to language-packs/somali/tests/glossary_intercepts.json)
+   ============================================================ */
+(function () {
+  "use strict";
+  const glossaryIntercepts = {
+    "consent": "Adigu ma rabtay in tani dhacdo? Ma kala ogtahay waxaa kasoo dhalan kara?",
+    "confidential": "Sirta waa la ilaaliyaa — ma jiro qof Soomaali ah oo dhageysanaya, codkaaga lama duubo.",
+    "psychological abuse": "Ma jiraa qof ku cabsi gelinaya, kaa kaxeeya saaxiibada, kuu sheega waxa aad samayso ama aanad samayn?",
+    "restraining order": "Warqad sharci ah oo ka mamnuucaysa inuu kuugu soo dhowaado guriga, shaqada, iskuulka carruurta — ka dibna magaceedu waa 'restraining order'.",
+  };
+  const directTriggers = [
+    { id: "gacan_ka_hadal", pattern: /gacan\b[^.!?]{1,30}\bhad(al|l\w+)/i, tag: "physical_violence_described", tier: "red",
+      coach: "Physical-violence language. Pause intake, confirm immediate safety, offer ED + 911 with EMTALA + Somali-specific status caveats." },
+    { id: "cabsi_gelin", pattern: /cabsi\s+geli\w+/i, tag: "intimidation_described", tier: "amber",
+      coach: "Intimidation language. Confirm immediate safety before continuing intake." },
+    { id: "dhuumli", pattern: /\b(dhuumli|dhuumi[\-\s]?dhuumi)\b/i, tag: "concealment_described", tier: "amber",
+      coach: "She is describing hiding. Slow down, ask permission before pressing." },
+    { id: "u_dulqaado", pattern: /u\s+dulqaado/i, tag: "silencing_pressure_reported", tier: "blue",
+      coach: "Patience-pressure framing. Do NOT validate as endurance; reflect dadaal (effort) instead." },
+    { id: "xishood_ceeb", pattern: /\b(xishood|xisood|ceeb)\b/i, tag: "shame_frame_named", tier: "blue",
+      coach: "Shame frame. Slow down. Lead with sir." },
+    { id: "waa_la_i_dilaa", pattern: /waa\s+la\s+i\s+dilaa/i, tag: "physical_violence_described", tier: "red",
+      coach: "Direct disclosure of being beaten. Pause, confirm safety, surface ED + DV hotline." },
+    { id: "waa_la_i_caayaa", pattern: /waa\s+la\s+i\s+caayaa/i, tag: "verbal_abuse_described", tier: "amber",
+      coach: "Verbal-abuse description. Confirm what she means; surface emotional-safety resources." },
+    { id: "kala_dareemiyaa", pattern: /(waa\s+la\s+i\s+kala\s+dareemiyaa|la\s+i\s+kala\s+wax\s+dareem\s+maayo)/i, tag: "coercive_control_described", tier: "amber",
+      coach: "Coercive-control description. Confirm specifics; route to advocacy framing." },
+  ];
+  const inferentialSignals = [
+    { id: "fear_on_arrival", pattern: /(carruur.*aamus|carruur.*cabsa|way\s+ka\s+cabsadaan|markuu\s+yimaado)/i, tier: "blue",
+      note: "Household fear pattern when one person arrives.", coach: "Children-fear pattern — reflect, don't press." },
+    { id: "futurity_refusal", pattern: /(ma\s+jeclaan\s+lahaa.*gabadhayda|gabadhayda.*sidan\s+ku\s+noolaato|saaxiibtayda\s+u\s+sheegi\s+maayo)/i, tier: "blue",
+      note: "Futurity refusal — \"I would not want my daughter to live like this.\"", coach: "Use the would-you-want frame to reflect." },
+    { id: "lost_peace", pattern: /(ku\s+raaxaysan\s+waayey|naf\s+qabow\s+ma\s+helo)/i, tier: "blue",
+      note: "Lost peace / lost comfort.", coach: "Ask about sleep, fear, energy — not 'abuse'." },
+    { id: "home_not_safe", pattern: /(guriga\s+ma\s+ammaan\s+aha|guriga\s+ma\s+jecla\s+in\s+aan\s+ka\s+tago)/i, tier: "amber",
+      note: "Home-not-safe framing.", coach: "Ask permission to talk about what ammaan (safety) would look like." },
+    { id: "somatized", pattern: /(caajisnimo|madaxa\s+aad\s+ayuu\s+i\s+xanuunsada|ma\s+cuni\s+karo)/i, tier: "blue",
+      note: "Somatized depletion.", coach: "Route to mental-health resource framing, not DV framing." },
+    { id: "religious", pattern: /(allah\s+ayaa\s+qoray|sabar\s+buu\s+i\s+siiyay)/i, tier: "blue",
+      note: "Religious / fatalistic framing.", coach: "Do not challenge faith framing. Reflect naxariis the survivor is showing herself." },
+    { id: "displacement", pattern: /(saaxiibtayda\s+mid\s+baa\s+ku\s+jirta|qof\s+aan\s+aqaano\s+sidan\s+ku\s+jiro|saaxiibtay.*xaalad)/i, tier: "blue",
+      note: "Displacement onto a 'friend' or 'neighbor'.", coach: "Do not name the projection. Reflect what she described as important." },
+    { id: "cultural_script", pattern: /(ragga\s+soomaaliyeed\s+waxay|sida\s+xaaska\s+soomaaliyeed\s+loo\s+dhaqo)/i, tier: "blue",
+      note: "Cultural / clan-pattern framing.", coach: "Ask if any of ragga or xaaska describes her own home." },
+    { id: "voice_silenced", pattern: /(ka\s+cabsado\s+markaan\s+hadlayo|inta\s+uu\s+joogo,?\s+ma\s+hadli\s+karo)/i, tier: "amber",
+      note: "Body-language / silence pattern reported.", coach: "Name what sirta would mean for her in this room." },
+    { id: "what_would_you_do", pattern: /adigu\s+maxaad\s+samayn\s+lahayd/i, tier: "blue",
+      note: "What-would-you-do reversal.", coach: "Reflect adigu adiga ayaa go'aamiya (you decide) and offer options." },
+    { id: "children_behavior_change", pattern: /(wiilkayga\s+iskuulka\s+muu\s+rabo|carruurta\s+hurdada\s+ma\s+jecla)/i, tier: "blue",
+      note: "Children's behavior change as anchor.", coach: "Connect to family-support framing." },
+    { id: "long_pause_diversion", pattern: /(\.\.\.|…)\s*$/, tier: "blue",
+      note: "Long pause + softened voice + diversion (paralinguistic).", coach: "She went quiet — wait. Don't fill the silence." },
+  ];
+  const antiClusterAlone = new Set(["religious"]);
+  const interpreterCities = ["Minneapolis", "Columbus", "Toronto", "London"];
+  const voiceScripts = {
+    consentInPerson: {
+      somali: "Salaan. Sirta waa la ilaaliyaa.\n\nWax aan diyaarsanahay inaan ku caawiyo, laakiin ma ihi qof Soomaali ah, ma ihi ciidan, ma ihi qof masjidka ka tirsan, ma ihi qof ka shaqeeya socdaalka.\n\nCodkaaga lama duubo. Hadalkaaga waxaa loo bedelayaa qoraal Ingiriis ah qof shaqaale ah ay arkaan, laakiin codkaagu ma jirayo waxba.\n\nHadaad rabto inaan istaajiyo, dheh \"jooji\". Hadaad rabto qof Soomaali ah oo aan magaalo kale ka yimid taleefoonka soo galo, dheh \"qof\". Hadaad rabto inaan tirtiro wax kasta, dheh \"tirtir\".\n\nMahadsanid.",
+      english: "Hello. The secret is kept.\n\nI am here to help, but I am not a Somali person, not police, not someone from the mosque, not someone who works in immigration.\n\nYour voice is not recorded. Your speech is converted to English text the staff person sees, but your voice itself is gone.\n\nIf you want me to stop, say \"jooji\". If you want a Somali person from another city brought in by phone, say \"qof\". If you want me to erase everything, say \"tirtir\".\n\nThank you.",
+    },
+    interpreterHandoff: {
+      somali: "Waxaan kuu soo gelinayaa haweenay Soomaali ah oo aan magaalada {CITY} ka yimid. Magaceeda waa {NAME}. Sirta weli waa la ilaaliyaa. Hadii aanad rabin, dheh \"maya\" si aan u joojiyo.",
+      english: "I am bringing in a Somali woman from {CITY}. Her name is {NAME}. The secret is still kept. If you do not want this, say \"maya\" so I can stop.",
+    },
+    wouldYouWant: {
+      somali: "Hadii saaxiibtaada hooyo ah ay sidan ku noolaan lahayd, maxaad ku odhan lahayd?",
+      english: "If your friend who is a mother were living like this, what would you say to her?",
+    },
+    sessionEnd: {
+      somali: "Waanu dhamaynay. Waxa la xafiday qoraalka shaqaalaha. Codkaagu ma jirayo. Ma jiro wax la diray. Mahadsanid.",
+      english: "We have finished. The staff person's notes were saved. Your voice is gone. Nothing was sent anywhere. Thank you.",
+    },
+    panicClear: {
+      somali: "Wax walba waa la tirtiray. Ma jiro wax la xafiday.",
+      english: "Everything has been erased. Nothing is saved.",
+    },
+  };
+  const sessionBrief = { survivor: "Asha M.", visit: "3rd visit", location: "Tukwila",
+    goal: "housing safety plan", sensitivity: "Avoid clan, mosque, neighborhood." };
+  const workerUtterances = [
+    { id: "w1", label: "Open question",                en: "What can I help you with today?",      so: "Maxaan caawimaad ku siin karaa maanta?" },
+    { id: "w2", label: "Safety check",                  en: "Are you in a safe place right now?",   so: "Meel aad ammaan ku tahay miyaad ku jirtaa hada?" },
+    { id: "w3", label: "Survivor-led prioritization",   en: "What do you need first?",              so: "Maxaad u baahan tahay ugu horeysa?" },
+    { id: "w4", label: "Permission · Somali framing",   en: "Is it okay if I describe this in Somali?", so: "Ma ku habboon yahay inaan tan ka warbixiyo Soomaali?" },
+    { id: "w5", label: "Glossary intercept · consent",  en: "consent",      so: "Adigu ma rabtay in tani dhacdo? Ma kala ogtahay waxaa kasoo dhalan kara?" },
+    { id: "w6", label: "Glossary intercept · confidential", en: "confidential", so: "Sirta waa la ilaaliyaa — ma jiro qof Soomaali ah oo dhageysanaya, codkaaga lama duubo." },
+  ];
+  const cannedUtterances = [
+    { id: "u1", label: "1 · Greeting (no triggers)", so: "Salaan. Waan kuugu mahadcelinayaa inaad i soo dhaweysay.", en: "Hello. Thank you for welcoming me.", direct: [], inference: [] },
+    { id: "u2", label: "2 · Children fear when he arrives", so: "Carruurta way aamusaan markuu yimaado. Way ka cabsadaan.", en: "The children go quiet when he arrives. They are afraid.", direct: [], inference: ["fear_on_arrival"] },
+    { id: "u3", label: "3 · Futurity refusal — daughter", so: "Ma jeclaan lahaa in gabadhayda ay sidan ku noolaato.", en: "I would not want my daughter to live like this.", direct: [], inference: ["futurity_refusal"] },
+    { id: "u4", label: "4 · Lost peace + somatized", so: "Waan ku raaxaysan waayey. Madaxa aad ayuu i xanuunsada. Ma cuni karo.", en: "I have lost my peace. My head hurts very much. I cannot eat.", direct: [], inference: ["lost_peace", "somatized"] },
+    { id: "u5", label: "5 · Religious framing alone (must NOT cluster)", so: "Allah ayaa qoray. Sabar buu i siiyay.", en: "God has written it. He gave me patience.", direct: [], inference: ["religious"] },
+    { id: "u6", label: "6 · DIRECT — gacan ka hadal", so: "Markii uu naxay, gacan ayuu kala hadlayey aniga.", en: "When he gets angry, he speaks with his hand to me.", direct: ["physical_violence_described"], inference: [] },
+    { id: "u7", label: "7 · DIRECT — cabsi gelin + dhuumli", so: "Wuxuu i cabsi geliyaa marwalba. Waan dhuumi-dhuumi.", en: "He puts fear in me always. I am hiding.", direct: ["intimidation_described", "concealment_described"], inference: [] },
+    { id: "u8", label: "8 · Shame frame · ceeb", so: "Ma sheegi karo. Waa ceeb badan. Xishood ayaa i hayso.", en: "I cannot say it. It is great shame. Modesty holds me.", direct: ["shame_frame_named"], inference: [] },
+  ];
+  const resources = {
+    housing: [
+      { name: "Mary's Place", phone: "206-621-8474", languages: ["en", "es"], area: "King County",
+        description: "Family emergency shelter and day services for women and families with children." },
+      { name: "Solid Ground — Broadview DV shelter", phone: "206-694-6766", languages: ["en", "es", "so"], area: "King County",
+        description: "DV-overlap transitional housing + rental-assistance case management." },
+      { name: "Catholic Community Services of Western WA", phone: "206-328-5696", languages: ["en", "es"], area: "King County + Western WA",
+        description: "Shelter, housing case management, rental assistance, and family support." },
+    ],
+    food: [
+      { name: "Rainier Valley Food Bank", phone: "206-723-4105", languages: ["so", "am", "ti", "om", "vi", "es"], area: "Southeast Seattle",
+        description: "Halal items + East African staples; culturally responsive food bank." },
+      { name: "Northwest Harvest", phone: "1-800-722-6924", languages: ["multilingual via partners"], area: "WA State (network)",
+        description: "Statewide hunger-relief network supplying 375+ food banks." },
+      { name: "ICHS food security programs", phone: "206-788-3700", languages: ["+50 incl. so"], area: "King County",
+        description: "Food-as-medicine programs, SNAP enrollment, culturally-tailored nutrition." },
+    ],
+    legal: [
+      { name: "Northwest Justice Project — CLEAR Hotline", phone: "1-888-201-1014", languages: ["en", "es"], area: "WA State",
+        description: "Civil legal aid hotline; DV protection orders, housing, family law." },
+      { name: "Northwest Immigrant Rights Project (NWIRP)", phone: "206-587-4009", languages: ["en", "es", "interpreter for so/ar/am"], area: "WA State",
+        description: "VAWA self-petitions, U-visas, T-visas, asylum, removal defense." },
+      { name: "Eastside Legal Assistance Program (ELAP)", phone: "425-747-7274", languages: ["en", "es", "zh"], area: "East + North King County",
+        description: "Free civil legal aid with dedicated DV unit; protection orders, family law." },
+    ],
+    medical: [
+      { name: "Harborview Medical Center", phone: "206-744-3000", languages: ["+100 incl. so", "am", "ti", "om", "ar"], area: "King County (regional Level I trauma)",
+        description: "DV/SA response team, refugee health clinic, 24/7 interpreter services." },
+      { name: "HealthPoint", phone: "1-866-893-5717", languages: ["en", "es", "so", "am", "ar", "vi", "ru", "uk"], area: "King County",
+        description: "FQHC: primary care, dental, behavioral health, maternity on a sliding scale." },
+      { name: "Neighborcare Health", phone: "206-296-4990", languages: ["en", "so", "am", "ti", "es", "vi"], area: "Seattle + Vashon",
+        description: "Largest FQHC in Seattle; medical, dental, behavioral, school-based." },
+    ],
+    somali_community: [
+      { name: "Refugee Women's Alliance (ReWA)", phone: "206-721-0243", languages: ["en", "so", "am", "ti", "om", "ar", "sw"], area: "Seattle, Tukwila, Kent, Beacon Hill",
+        description: "DV advocacy, behavioral health, legal aid, housing case management for refugee/immigrant women." },
+      { name: "API Chaya", phone: "1-877-922-4292", languages: ["en", "so", "am", "ar", "sw"], area: "WA State, Seattle-based",
+        description: "Survivor-led advocacy for South Asian, Asian, Pacific Islander, and African immigrant survivors." },
+      { name: "Somali Health Board", phone: "206-403-1953", languages: ["so", "ar", "en"], area: "King County",
+        description: "Somali-led public-health org; CHW outreach, maternal health, mental health navigation." },
+    ],
+  };
+  const intakeFieldOptions = {
+    presenting_issue: ["housing_unsafe", "food_insecurity", "medical_acute", "legal_protection_order", "child_safety", "described_household_fear", "described_futurity_refusal", "described_somatic_depletion"],
+    safety_flags: ["abuser_at_home_now", "weapons_in_home", "children_present", "isolated_from_family", "controlled_finances", "transport_dependent"],
+    requested_resources: ["housing", "food", "legal", "medical", "somali_community", "interpreter_out_of_region"],
+  };
+  const meta = { id: "somali", languageCode: "so", languageNameSelf: "Soomaali", dialect: "Maxaa-tiri", version: "0.1",
+    asrModel: "MMS-1b-all", mtModel: "NLLB-200-distilled-600M", ttsModel: "MMS-TTS-som" };
+  window.HishmoSomaliPack = Object.freeze({
+    meta, glossaryIntercepts, directTriggers, inferentialSignals, antiClusterAlone,
+    interpreterCities, voiceScripts, sessionBrief, cannedUtterances, workerUtterances,
+    resources, intakeFieldOptions,
+  });
+})();
+  </script>
+
+  <!-- pdf-export.js (inlined) -->
+  <script>
+(function () {
+  "use strict";
+  function fmtDate(iso) {
+    const d = iso ? new Date(iso) : new Date();
+    const pad = (n) => String(n).padStart(2, "0");
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  }
+  function softWrap(doc, text, x, y, maxWidth, lineHeight) {
+    if (!text) return y;
+    doc.splitTextToSize(String(text), maxWidth).forEach((line) => { doc.text(line, x, y); y += lineHeight; });
+    return y;
+  }
+  function exportSession(state) {
+    if (!window.jspdf || !window.jspdf.jsPDF) throw new Error("jsPDF not loaded — check the CDN script tag in index.html");
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF({ unit: "pt", format: "letter", compress: true });
+    const W = doc.internal.pageSize.getWidth(); const margin = 48; const col = W - margin * 2;
+    let y = margin;
+    doc.setFont("helvetica", "bold"); doc.setFontSize(16); doc.text("Hishmo intake summary", margin, y); y += 22;
+    doc.setFont("helvetica", "normal"); doc.setFontSize(9); doc.setTextColor(100);
+    doc.text("Local file. No cloud. Generated client-side from in-memory session state.", margin, y); y += 14;
+    doc.setDrawColor(180); doc.line(margin, y, W - margin, y); y += 18;
+    doc.setTextColor(20); doc.setFont("helvetica", "bold"); doc.setFontSize(11); doc.text("Session", margin, y); y += 14;
+    doc.setFont("helvetica", "normal"); doc.setFontSize(10);
+    [["Date", fmtDate(state.startedAt)], ["Closed", fmtDate()], ["Caseworker", state.workerName || "(demo placeholder)"],
+     ["Survivor pseudonym", state.survivorPseudonym || "(demo placeholder)"], ["Visit", state.visit || "—"],
+     ["Location", state.location || "—"], ["Language pack", `${state.packId || "somali"} (v${state.packVersion || "0.1"})`],
+     ["Session UUID", state.uuid || "—"]].forEach((r) => {
+      doc.setFont("helvetica", "bold"); doc.text(r[0] + ":", margin, y);
+      doc.setFont("helvetica", "normal"); doc.text(String(r[1]), margin + 130, y); y += 14;
+    });
+    y += 6;
+    doc.setFont("helvetica", "bold"); doc.setFontSize(11); doc.text("Today's goal", margin, y); y += 14;
+    doc.setFont("helvetica", "normal"); doc.setFontSize(10);
+    y = softWrap(doc, state.goal || "(none recorded)", margin, y, col, 13); y += 8;
+    doc.setFont("helvetica", "bold"); doc.setFontSize(11); doc.text("Structured intake", margin, y); y += 14;
+    doc.setFont("helvetica", "normal"); doc.setFontSize(10);
+    [["Presenting issue(s)", (state.presentingIssues || []).join(", ") || "(none)"],
+     ["Safety flag(s)", (state.safetyFlags || []).join(", ") || "(none)"],
+     ["Resources requested", (state.requestedResources || []).join(", ") || "(none)"]].forEach((r) => {
+      doc.setFont("helvetica", "bold"); doc.text(r[0] + ":", margin, y); y += 12;
+      doc.setFont("helvetica", "normal"); y = softWrap(doc, r[1], margin + 12, y, col - 12, 13); y += 4;
+    });
+    doc.setFont("helvetica", "bold"); doc.setFontSize(11); doc.text("Caseworker notes", margin, y); y += 14;
+    doc.setFont("helvetica", "normal"); doc.setFontSize(10);
+    y = softWrap(doc, state.notes || "(no free-text notes)", margin, y, col, 13); y += 8;
+    doc.setFont("helvetica", "bold"); doc.setFontSize(11); doc.text("Verbatim quotes (Somali + English MT)", margin, y); y += 14;
+    doc.setFont("helvetica", "normal"); doc.setFontSize(10);
+    if (!state.verbatim || state.verbatim.length === 0) {
+      doc.setTextColor(120); doc.text("(no verbatim captures this session)", margin, y); doc.setTextColor(20); y += 14;
+    } else {
+      state.verbatim.forEach((q, i) => {
+        doc.setFont("helvetica", "bold"); doc.text(`${i + 1}. Somali:`, margin, y); y += 12;
+        doc.setFont("helvetica", "normal"); y = softWrap(doc, q.so, margin + 12, y, col - 12, 13);
+        doc.setFont("helvetica", "bold"); doc.text("   English MT:", margin, y); y += 12;
+        doc.setFont("helvetica", "italic"); y = softWrap(doc, q.en, margin + 12, y, col - 12, 13);
+        doc.setFont("helvetica", "normal"); doc.setFontSize(8); doc.setTextColor(120);
+        doc.text(`   captured ${fmtDate(q.ts)}`, margin + 12, y);
+        doc.setTextColor(20); doc.setFontSize(10); y += 12;
+      });
+    }
+    y += 4;
+    doc.setFont("helvetica", "bold"); doc.setFontSize(11); doc.text("Resources attached to case", margin, y); y += 14;
+    doc.setFont("helvetica", "normal"); doc.setFontSize(10);
+    if (!state.attachedResources || state.attachedResources.length === 0) {
+      doc.setTextColor(120); doc.text("(no resources attached)", margin, y); doc.setTextColor(20); y += 14;
+    } else {
+      state.attachedResources.forEach((r) => {
+        doc.setFont("helvetica", "bold"); y = softWrap(doc, `• ${r.name}`, margin, y, col, 13);
+        doc.setFont("helvetica", "normal"); doc.setFontSize(9);
+        y = softWrap(doc, `   ${r.phone} · ${(r.languages || []).join(", ")} · ${r.area}`, margin, y, col, 12);
+        const deliveryLine = r.delivery
+          ? `   delivered to survivor: ${r.delivery} @ ${r.deliveryTs}`
+          : `   delivered to survivor: (no method chosen — in worker's notes only)`;
+        y = softWrap(doc, deliveryLine, margin, y, col, 12);
+        doc.setFontSize(10);
+      });
+    }
+    const footY = doc.internal.pageSize.getHeight() - margin;
+    doc.setDrawColor(180); doc.line(margin, footY - 22, W - margin, footY - 22);
+    doc.setFontSize(8); doc.setTextColor(120);
+    doc.text("Hishmo demo · Somali pack v0.1 · client-side PDF · no cloud egress · panic-clear wipes in-memory state in <2 s", margin, footY - 8);
+    const ts = new Date().toISOString().replace(/[:.]/g, "-");
+    const safePseudo = (state.survivorPseudonym || "intake").replace(/[^a-zA-Z0-9._-]/g, "_").toLowerCase();
+    const filename = `hishmo_${safePseudo}_${ts}.pdf`;
+    doc.save(filename);
+    return filename;
+  }
+  window.HishmoPdfExport = { exportSession };
+})();
+  </script>
+
+<script>
+/* ============================================================
+   Hishmo demo runtime — Somali pack
+   - All Somali strings come from pack-data.js (lifted verbatim
+     from language-packs/somali/*.md). Do not paste new Somali in
+     here.
+   - State is RAM only. Panic clear actually clears.
+   - Caseworker notes / structured fields / verbatim quotes /
+     attached resources live in this state and render to the
+     glasses HUD pane only — never the phone tabletop.
+   ============================================================ */
+
+const PACK = window.HishmoSomaliPack;
+const $   = (id) => document.getElementById(id);
+
+// -- STATE (RAM only — panic clear wipes this) ---------------------------
+
+const state = newState();
+
+function newState() {
+  return {
+    flow: "idle",                    // idle | consent | live | closed
+    recordingMode: "none",           // none | ephemeral | capturing
+    speakingDirection: "idle",       // idle | worker_to_survivor | survivor_to_worker
+                                     // Split-screen renders only when worker_to_survivor.
+                                     // Survivor must NEVER see severity coaching — that
+                                     // lives on the glasses HUD pane only.
+    workerUtteranceIdx: 0,           // cycles through PACK.workerUtterances
+    captureNext: false,              // when true, next utterance is captured verbatim
+    inferential: new Set(),          // ids that fired
+    direct: new Set(),               // tags that fired
+    notes: "",                       // free-text caseworker notes (HUD only)
+    goal: "",                        // today's goal (HUD only)
+    presentingIssues: new Set(),     // worker-tagged (HUD only)
+    safetyFlags: new Set(),          // worker-tagged (HUD only)
+    requestedResources: new Set(),   // implied via attachedResources
+    verbatim: [],                    // [{ so, en, ts }]
+    attachedResources: [],           // [{ name, phone, ... }]
+    noteSuggestions: [],             // [{ id, source, text, ts }] — trigger-fired
+    tagSuggestions: [],              // [{ id, category, tag, source, ts, prefix }]
+                                     // System-proposed structured tags from
+                                     // conversation inference. Worker confirms
+                                     // to add. Per caseworker-behaviors §11.4,
+                                     // confirmed_* prefix is FORBIDDEN — only
+                                     // possible_*, probable_*, described_*.
+    seenSuggestionIds: new Set(),    // de-dupe per session
+    seenTagIds: new Set(),
+    dictateCount: 0,
+    liveMicActive: false,
+    liveMicSide: null,           // "survivor" | "worker" | null
+    survivorMicLang: "so-SO",
+    workerMicLang: "en-US",
+    history: [],                     // event log (no message bodies)
+    uuid: null,
+    startedAt: null,
+    workerName: "Maya R. (demo)",
+    survivorPseudonym: "Asha M.",
+    visit: PACK.sessionBrief.visit,
+    location: PACK.sessionBrief.location,
+    packId: PACK.meta.id,
+    packVersion: PACK.meta.version,
+  };
+}
+
+// -- DOM helpers ---------------------------------------------------------
+
+function setText(id, txt)   { $(id).textContent = txt; }
+function setHtml(id, html)  { $(id).innerHTML = html; }
+function show(id)           { $(id).style.display = ""; }
+
+function toast(msg, kind, ms) {
+  const t = $("toast");
+  t.className = "toast " + (kind || "");
+  t.textContent = msg;
+  t.classList.add("show");
+  clearTimeout(window._tt);
+  window._tt = setTimeout(() => t.classList.remove("show"), ms || 2400);
+}
+
+// -- TIER + CLUSTER ENGINE (matches glossary.md §2.1 exactly) -----------
+// direct_count >= 1                                  → Direct
+// inferential_count >= 2 in same session             → Probable (amber)
+// inferential_count >= 3 OR Probable + 1 Direct      → "would-you-want" frame
+// Anti-cluster: religious-framing-alone NEVER promotes by itself
+
+function significantInferential() {
+  const ids = [...state.inferential];
+  if (ids.length === 1 && PACK.antiClusterAlone.has(ids[0])) return [];
+  return ids;
+}
+
+function computeTier() {
+  const inf = significantInferential().length;
+  const dir = state.direct.size;
+  if (dir >= 1 && inf >= 1) return "elevated (Probable + Direct → would-you-want)";
+  if (dir >= 1)             return "Direct";
+  if (inf >= 3)             return "Probable+ (would-you-want frame)";
+  if (inf >= 2)             return "Probable";
+  if (inf === 1)            return "Possible";
+  return "background";
+}
+
+// -- RENDER --------------------------------------------------------------
+
+function render() {
+  setText("state-flow", state.flow);
+  setText("state-recording", state.recordingMode);
+  const inf = state.inferential.size;
+  const dir = state.direct.size;
+  setText("state-cluster", `${inf} inferential / ${dir} direct`);
+  setText("state-tier", computeTier());
+  setText("state-uuid", state.uuid || "—");
+
+  // Brief block
+  if (state.flow !== "idle") {
+    const b = PACK.sessionBrief;
+    $("brief-line").innerHTML =
+      `<strong>${state.survivorPseudonym}</strong>, ${b.visit}, ${b.location}.<br>` +
+      `Goal: ${state.goal || b.goal}.<br>` +
+      `<em>${b.sensitivity}</em>`;
+  } else {
+    $("brief-line").textContent = "Open Hishmo to load brief.";
+  }
+
+  // Phone LED
+  const led = $("phone-led");
+  const ledLabel = $("phone-led-label");
+  led.classList.remove("green","red","grey");
+  if (state.flow === "idle" || state.flow === "closed") {
+    led.classList.add("grey");
+    ledLabel.textContent = state.flow === "closed" ? "no record · session closed" : "stand-by";
+  } else if (state.recordingMode === "capturing") {
+    led.classList.add("red");
+    ledLabel.textContent = "CAPTURING — RED";
+  } else {
+    led.classList.add("green");
+    ledLabel.textContent = "sirta waa la ilaaliyaa · no record";
+  }
+
+  // Survivor half LED ring (LED is the ONLY phone-side color signal · only
+  // changes for recording state, NEVER for severity tier).
+  const sh = $("survivor-half");
+  sh.classList.remove("green","red");
+  if (state.recordingMode === "capturing") sh.classList.add("red");
+  else                                     sh.classList.add("green");
+  $("survivor-led").textContent = state.recordingMode === "capturing"
+    ? "waa la xafidaa — codka la duubay"
+    : "sirta waa la ilaaliyaa";
+
+  // Surface mode: collapse the survivor side ONLY when there's no live session.
+  // During LIVE (either direction) both halves render the live transcript so
+  // the survivor can verify her own ASR + the worker can read English MT.
+  const surface = document.querySelector("#tabletop .surface");
+  surface.classList.toggle("pre-session",
+    state.flow === "idle" || state.flow === "closed");
+  sh.classList.toggle("collapsed",
+    state.flow === "idle" || state.flow === "closed");
+
+  // Soft direction frame: highlight whichever side is the ORIGINATOR right now.
+  // Not severity color — just a subtle background tint of the speaking half.
+  const wh = $("worker-half");
+  sh.classList.toggle("speaking", state.speakingDirection === "survivor_to_worker" && state.flow === "live");
+  wh.classList.toggle("speaking", state.speakingDirection === "worker_to_survivor" && (state.flow === "live" || state.flow === "consent"));
+
+  // Glasses HUD indicator
+  const ind = $("hud-indicator");
+  ind.classList.remove("capturing","no-record");
+  if (state.recordingMode === "capturing")      { ind.classList.add("capturing"); ind.textContent = "capturing"; }
+  else if (state.recordingMode === "ephemeral") { ind.textContent = "ephemeral"; }
+  else                                           { ind.classList.add("no-record"); ind.textContent = "no record"; }
+
+  // Live mic buttons — one per side, only one active at a time
+  const survivorMicBtn = $("survivor-mic-btn");
+  const workerMicBtn   = $("worker-mic-btn");
+  if (survivorMicBtn) {
+    const on = state.liveMicActive && state.liveMicSide === "survivor";
+    survivorMicBtn.classList.toggle("active", on);
+    $("survivor-mic-label").textContent = on ? "listening…" : "client mic";
+  }
+  if (workerMicBtn) {
+    const on = state.liveMicActive && state.liveMicSide === "worker";
+    workerMicBtn.classList.toggle("active", on);
+    $("worker-mic-label").textContent = on ? "listening…" : "worker mic";
+  }
+
+  renderVerbatim();
+  renderAttached();
+  renderChips();
+  renderNoteSuggestions();
+  renderTagSuggestions();
+}
+
+function renderTagSuggestions() {
+  const list = $("tag-suggestions");
+  if (!list) return;
+  if (!state.tagSuggestions.length) {
+    list.innerHTML =
+      '<div class="verbatim-item" style="border-style:dashed; color: var(--muted);">' +
+      '(none — fires automatically when triggers + inferential clusters land)' +
+      '</div>';
+    return;
+  }
+  list.innerHTML = state.tagSuggestions.map((t, i) => `
+    <div class="verbatim-item">
+      <div class="so">
+        <strong>${escapeHtml(t.category)}</strong> · <code style="color:var(--accent-2);background:var(--bg);padding:1px 4px;border-radius:3px;">${escapeHtml(t.tag)}</code>
+      </div>
+      <div class="en" style="color: var(--muted); font-style: normal;">
+        inferred from: ${escapeHtml(t.source)} · ${escapeHtml(t.ts)}
+      </div>
+      <div style="display:flex; gap:6px; margin-top:6px;">
+        <button class="chip" onclick="confirmTag(${i})" title="Confirm this tag">
+          ✓ confirm
+        </button>
+        <button class="chip" style="opacity:0.7;" onclick="rejectTag(${i})" title="Reject this suggestion">
+          ✗ reject
+        </button>
+      </div>
+    </div>
+  `).join("");
+}
+
+function renderNoteSuggestions() {
+  const list = $("note-suggestions");
+  if (!state.noteSuggestions.length) {
+    list.innerHTML =
+      '<div class="verbatim-item" style="border-style:dashed; color: var(--muted);">' +
+      '(none — fires when direct triggers hit or the cluster engine promotes)' +
+      '</div>';
+    return;
+  }
+  list.innerHTML = state.noteSuggestions.map((n, i) => `
+    <div class="verbatim-item">
+      <div class="so">${escapeHtml(n.text)}</div>
+      <div class="en" style="color: var(--muted); font-style: normal;">
+        source: ${escapeHtml(n.source)} · ${escapeHtml(n.ts)}
+      </div>
+      <div style="display:flex; gap:6px; margin-top:6px;">
+        <button class="chip" onclick="appendSuggestion(${i})">+ append to notes</button>
+        <button class="chip" style="opacity:0.7;" onclick="dismissSuggestion(${i})">dismiss</button>
+      </div>
+    </div>
+  `).join("");
+}
+
+function suggestNote(source, text) {
+  const id = source + ":" + text;
+  if (state.seenSuggestionIds.has(id)) return;   // de-dupe per session
+  state.seenSuggestionIds.add(id);
+  state.noteSuggestions.push({
+    id,
+    source,
+    text,
+    ts: new Date().toLocaleTimeString(),
+  });
+  log(`NOTE_SUGGESTED ${source}`);
+}
+
+// Map direct-trigger tags + inferential-cluster IDs to proposed structured-field tags.
+// Production: this is the on-phone NLU/LLM layer inferring categorization from
+// conversation content. Demo: deterministic curated mapping that respects the
+// "no auto-label" rule — every proposed tag uses possible_/probable_/described_
+// prefixes only (caseworker-behaviors §11.4). The worker confirms to add.
+const TAG_PROPOSAL_MAP = {
+  // Direct triggers → structured tags (worker still confirms before any tag is added)
+  "physical_violence_described": [
+    { category: "presenting_issue", tag: "medical_acute" },
+    { category: "presenting_issue", tag: "child_safety" },
+    { category: "safety_flag",      tag: "abuser_at_home_now" },
+  ],
+  "intimidation_described": [
+    { category: "presenting_issue", tag: "described_household_fear" },
+  ],
+  "concealment_described": [
+    { category: "safety_flag",      tag: "abuser_at_home_now" },
+    { category: "safety_flag",      tag: "isolated_from_family" },
+  ],
+  "coercive_control_described": [
+    { category: "safety_flag",      tag: "controlled_finances" },
+    { category: "safety_flag",      tag: "isolated_from_family" },
+  ],
+  "verbal_abuse_described": [
+    { category: "presenting_issue", tag: "described_household_fear" },
+  ],
+  "shame_frame_named": [],   // disclosure-barrier signal · no tag
+  "silencing_pressure_reported": [],
+  // Inferential signal IDs → described_* structured tags
+  "fear_on_arrival":           [{ category: "presenting_issue", tag: "described_household_fear" }],
+  "futurity_refusal":          [{ category: "presenting_issue", tag: "described_futurity_refusal" }],
+  "lost_peace":                [{ category: "presenting_issue", tag: "described_somatic_depletion" }],
+  "home_not_safe":             [{ category: "safety_flag",      tag: "abuser_at_home_now" }],
+  "somatized":                 [{ category: "presenting_issue", tag: "described_somatic_depletion" }],
+  "voice_silenced":            [{ category: "safety_flag",      tag: "isolated_from_family" }],
+  "children_behavior_change":  [{ category: "safety_flag",      tag: "children_present" }],
+};
+
+function suggestTagsFor(triggerKey, sourceLabel) {
+  const proposals = TAG_PROPOSAL_MAP[triggerKey] || [];
+  proposals.forEach((p) => {
+    const id = `${p.category}:${p.tag}:${sourceLabel}`;
+    if (state.seenTagIds.has(id)) return;
+    // Skip if already in the chip set (worker already tagged manually)
+    const set = p.category === "presenting_issue" ? state.presentingIssues : state.safetyFlags;
+    if (set.has(p.tag)) return;
+    state.seenTagIds.add(id);
+    state.tagSuggestions.push({
+      id,
+      category: p.category,
+      tag: p.tag,
+      source: sourceLabel,
+      ts: new Date().toLocaleTimeString(),
+    });
+    log(`TAG_SUGGESTED ${p.category}:${p.tag}`);
+  });
+}
+
+function confirmTag(idx) {
+  const t = state.tagSuggestions[idx];
+  if (!t) return;
+  const set = t.category === "presenting_issue" ? state.presentingIssues : state.safetyFlags;
+  set.add(t.tag);
+  state.tagSuggestions.splice(idx, 1);
+  toast(`Tag confirmed: ${t.category} · ${t.tag}`, "ok");
+  log(`TAG_CONFIRM ${t.category}:${t.tag}`);
+  render();
+}
+
+function rejectTag(idx) {
+  const t = state.tagSuggestions[idx];
+  if (!t) return;
+  state.tagSuggestions.splice(idx, 1);
+  toast(`Tag rejected: ${t.category} · ${t.tag}`, "warn");
+  log(`TAG_REJECT ${t.category}:${t.tag}`);
+  render();
+}
+
+function appendSuggestion(idx) {
+  const n = state.noteSuggestions[idx];
+  if (!n) return;
+  const ta = $("caseworker-notes");
+  const sep = ta.value.trim() ? "\n" : "";
+  ta.value = ta.value + sep + `[${n.ts}] ${n.text}`;
+  state.notes = ta.value;
+  state.noteSuggestions.splice(idx, 1);
+  toast("Suggestion appended to notes.", "ok");
+  log(`NOTE_APPEND_SUGGESTION ${n.source}`);
+  render();
+}
+
+function dismissSuggestion(idx) {
+  state.noteSuggestions.splice(idx, 1);
+  toast("Suggestion dismissed.", "warn");
+  log("NOTE_DISMISS_SUGGESTION");
+  render();
+}
+
+function dismissAllSuggestions() {
+  if (!state.noteSuggestions.length) return;
+  state.noteSuggestions = [];
+  toast("All trigger suggestions dismissed.", "warn");
+  render();
+}
+
+// Demo-only: cycle through canned worker-spoken notes to simulate the
+// ── Live microphone input ────────────────────────────────────────────────
+// Uses the browser Web Speech API (SpeechRecognition).
+// Survivor mic: continuous recognition routed through the trigger/cluster
+//   engine exactly like canned utterances.
+// Worker mic (dictateNote): one-shot English recognition appended to notes.
+
+let _recognition = null;
+
+// ── Demo phrase-table translation (offline) ─────────────────────────────
+// The browser demo has no NLLB / MT model. To make the live mic UX show a
+// real translation on the listener's side, we build a phrase table at
+// startup from every canonical EN↔SO pair already shipped in PACK
+// (workerUtterances, cannedUtterances, voiceScripts, glossaryIntercepts).
+// translateDemo(text, fromLang) returns { translated, matched }. If no
+// pack entry resembles the input, translated === null so callers can
+// surface a clear 'translation pending' placeholder on the listener side
+// instead of silently mirroring untranslated text.
+const _normalize = (s) => String(s || "")
+  .toLowerCase()
+  .replace(/[\u2018\u2019\u201C\u201D]/g, "'")
+  .replace(/[^a-z\u00c0-\u024f0-9'\s]/gi, " ")
+  .replace(/\s+/g, " ")
+  .trim();
+
+let _PHRASE_TABLE = null;
+function _buildPhraseTable() {
+  if (_PHRASE_TABLE) return _PHRASE_TABLE;
+  const pairs = [];
+  // workerUtterances: { en, so }
+  (PACK.workerUtterances || []).forEach((u) => {
+    if (u.en && u.so) pairs.push({ en: u.en, so: u.so });
+  });
+  // cannedUtterances: { en, so }
+  (PACK.cannedUtterances || []).forEach((u) => {
+    if (u.en && u.so) pairs.push({ en: u.en, so: u.so });
+  });
+  // voiceScripts: { english, somali }
+  Object.values(PACK.voiceScripts || {}).forEach((v) => {
+    if (v && v.english && v.somali) pairs.push({ en: v.english, so: v.somali });
+  });
+  // glossaryIntercepts: { en_term: somali_string }
+  Object.entries(PACK.glossaryIntercepts || {}).forEach(([en, so]) => {
+    if (en && so) pairs.push({ en, so });
+  });
+  // Build lookup maps
+  const enToSo = new Map();
+  const soToEn = new Map();
+  pairs.forEach((p) => {
+    enToSo.set(_normalize(p.en), p.so);
+    soToEn.set(_normalize(p.so), p.en);
+  });
+  _PHRASE_TABLE = { pairs, enToSo, soToEn };
+  return _PHRASE_TABLE;
+}
+
+// Word-overlap fallback: if no exact match, pick the pack pair whose source
+// side shares the most content words with the input (>= 50% of input words),
+// otherwise return null. This lets a slightly-misheard ASR still match a
+// canned line during the demo while never silently fabricating a translation.
+function _fuzzyMatch(inputNorm, sourceMap, table, srcKey, dstKey) {
+  const inWords = new Set(inputNorm.split(" ").filter((w) => w.length > 2));
+  if (!inWords.size) return null;
+  let best = null, bestScore = 0;
+  table.pairs.forEach((p) => {
+    const srcNorm = _normalize(p[srcKey]);
+    const cand = new Set(srcNorm.split(" ").filter((w) => w.length > 2));
+    if (!cand.size) return;
+    let overlap = 0;
+    inWords.forEach((w) => { if (cand.has(w)) overlap++; });
+    const score = overlap / Math.max(inWords.size, cand.size);
+    if (score > bestScore) { bestScore = score; best = p; }
+  });
+  return bestScore >= 0.5 ? best[dstKey] : null;
+}
+
+// fromLang: "en" (worker mic spoke English) → returns Somali; "so" → English.
+// Phrase-table-only path. Synchronous. Used as a fast cache before LLM.
+function translateDemo(text, fromLang) {
+  if (fromLang !== "en" && fromLang !== "so") {
+    return { translated: null, matched: "bad-lang" };
+  }
+  const table = _buildPhraseTable();
+  const norm = _normalize(text);
+  if (!norm) return { translated: null, matched: "empty" };
+  if (fromLang === "en") {
+    if (table.enToSo.has(norm)) return { translated: table.enToSo.get(norm), matched: "exact" };
+    const fuzzy = _fuzzyMatch(norm, table.enToSo, table, "en", "so");
+    if (fuzzy) return { translated: fuzzy, matched: "fuzzy" };
+    return { translated: null, matched: "none" };
+  } else {
+    if (table.soToEn.has(norm)) return { translated: table.soToEn.get(norm), matched: "exact" };
+    const fuzzy = _fuzzyMatch(norm, table.soToEn, table, "so", "en");
+    if (fuzzy) return { translated: fuzzy, matched: "fuzzy" };
+    return { translated: null, matched: "none" };
+  }
+}
+
+// ── LLM-backed bidirectional translator ─────────────────────────────────
+// Path: phrase-table exact → phrase-table fuzzy → LLM proxy → null.
+// fromLang MUST be exactly "en" or "so". The proxy enforces direction
+// strictly (en→so or so→en, never same-language) and the client double-
+// checks by rejecting outputs that look like the same language as input.
+// translateBaseUrl is configurable so you can point at a remote proxy or
+// localhost. Defaults to same-origin /api/translate.
+window.HISHMO_TRANSLATE = window.HISHMO_TRANSLATE || {
+  // Live translate proxy (gpt-4.1-mini, EN↔SO, direction-strict).
+  // Empty string = same-origin /api/translate (used when this file is
+  // served by the bundled Node proxy, or by the permanent deployment).
+  baseUrl: "https://8787-it9xtml5627j0hxopvr19-0ed1efcb.us1.manus.computer",
+  enabled: true,          // set false to force offline phrase-table-only
+  cache: new Map(),       // text+fromLang → translated
+};
+
+function _looksSomali(s) {
+  // Crude script/word heuristic: Somali rarely uses 'p', 'v', 'z' and very
+  // commonly uses tokens like 'oo', 'ku', 'ma', 'aan', 'iyo', 'waxa', "ku jirtaa".
+  const t = String(s || "").toLowerCase();
+  if (/\b(waxa|aan|iyo|oo |ku |ma |miyaa|hada|maanta|haa|maya)\b/.test(t)) return true;
+  return false;
+}
+function _looksEnglish(s) {
+  const t = String(s || "").toLowerCase();
+  if (/\b(the|and|you|are|is|was|with|have|for|that|this|what|how|when|where|safe|help|today)\b/.test(t)) return true;
+  return false;
+}
+
+async function translateText(text, fromLang) {
+  if (fromLang !== "en" && fromLang !== "so") {
+    throw new Error("translateText: fromLang must be 'en' or 'so', got " + fromLang);
+  }
+  const t = String(text || "").trim();
+  if (!t) return { translated: "", matched: "empty", source: "none" };
+
+  // 1. Phrase-table fast path
+  const ph = translateDemo(t, fromLang);
+  if (ph.translated) {
+    return { translated: ph.translated, matched: ph.matched, source: "phrase-table" };
+  }
+
+  // 2. Cache
+  const cacheKey = fromLang + "::" + t;
+  const cached = window.HISHMO_TRANSLATE.cache.get(cacheKey);
+  if (cached) {
+    return { translated: cached, matched: "cached", source: "cache" };
+  }
+
+  // 3. LLM proxy (if enabled)
+  if (!window.HISHMO_TRANSLATE.enabled) {
+    return { translated: null, matched: "none", source: "offline-disabled" };
+  }
+  try {
+    const url = (window.HISHMO_TRANSLATE.baseUrl || "") + "/api/translate";
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text: t, from: fromLang, to: fromLang === "en" ? "so" : "en" }),
+    });
+    if (!res.ok) {
+      const body = await res.text().catch(() => "");
+      log("TRANSLATE_HTTP_FAIL status=" + res.status + " body=" + body.slice(0, 80));
+      return { translated: null, matched: "none", source: "http-error" };
+    }
+    const j = await res.json();
+    const out = String(j.translated || "").trim();
+    if (!out) return { translated: null, matched: "none", source: "empty-response" };
+    // Direction sanity check: reject same-language echoes
+    const wantSomali = (fromLang === "en");
+    const looksSo = _looksSomali(out);
+    const looksEn = _looksEnglish(out);
+    if (wantSomali && looksEn && !looksSo) {
+      log("TRANSLATE_DIRECTION_FAIL want=so got=en text=" + out.slice(0, 60));
+      return { translated: null, matched: "none", source: "direction-fail" };
+    }
+    if (!wantSomali && looksSo && !looksEn) {
+      log("TRANSLATE_DIRECTION_FAIL want=en got=so text=" + out.slice(0, 60));
+      return { translated: null, matched: "none", source: "direction-fail" };
+    }
+    window.HISHMO_TRANSLATE.cache.set(cacheKey, out);
+    return { translated: out, matched: "llm", source: "llm" };
+  } catch (e) {
+    log("TRANSLATE_NETWORK_FAIL " + (e && e.message ? e.message : String(e)));
+    return { translated: null, matched: "none", source: "network-error" };
+  }
+}
+
+// English fallback patterns — fire the same triggers when demoing in English.
+const EN_DIRECT = [
+  { id: "gacan_ka_hadal", re: /\b(hit|beat|struck|punch|kick|slap|hurt me|physical)\b/i, tag: "physical_violence_described", tier: "red", coach: "Physical-violence language. Pause intake, confirm immediate safety." },
+  { id: "cabsi_gelin",    re: /\b(scared|afraid|fear|threaten|intimidat)\b/i,             tag: "intimidation_described",   tier: "amber", coach: "Intimidation language. Confirm immediate safety before continuing." },
+  { id: "dhuumli",        re: /\b(hiding|conceal|kept secret|hide it)\b/i,                tag: "concealment_described",    tier: "amber", coach: "She is describing hiding. Slow down, ask permission before pressing." },
+  { id: "xishood_ceeb",   re: /\b(shame|embarrass|disgrace|honor|reputation)\b/i,         tag: "shame_frame_named",        tier: "blue",  coach: "Shame frame. Slow down. Lead with sir." },
+  { id: "waa_la_i_dilaa", re: /\b(going to kill|kill me|threaten my life|murder)\b/i,     tag: "physical_violence_described", tier: "red", coach: "Direct threat to life. Pause, confirm safety, surface ED + DV hotline." },
+  { id: "waa_la_i_caayaa",re: /\b(yell|scream|curse|insult|call me names|verbally)\b/i,  tag: "verbal_abuse_described",   tier: "amber", coach: "Verbal-abuse description. Surface emotional-safety resources." },
+  { id: "kala_dareemiyaa",re: /\b(money|finances|bank account|controls what I|not allowed)\b/i, tag: "coercive_control_described", tier: "amber", coach: "Coercive-control description. Route to advocacy framing." },
+];
+const EN_INFERENTIAL = [
+  { id: "fear_on_arrival",       re: /\b(kids quiet|children scared|when he comes|when he gets home)\b/i },
+  { id: "futurity_refusal",      re: /\b(don't want (my )?(daughter|children)|not like this)\b/i },
+  { id: "lost_peace",            re: /\b(can't rest|no peace|can't relax|constantly anxious)\b/i },
+  { id: "home_not_safe",         re: /\b(not safe (at home)?|home isn't safe|can't go home)\b/i },
+  { id: "somatized",             re: /\b(headache|can't eat|can't sleep|stomach pain|always tired)\b/i },
+  { id: "religious",             re: /\b(god (has )?written|allah|fate|destiny|it is written)\b/i },
+  { id: "displacement",          re: /\b(friend of mine|someone I know|asking for a friend)\b/i },
+  { id: "voice_silenced",        re: /\b(can't (speak|talk)|not allowed to say|forbidden)\b/i },
+  { id: "children_behavior_change", re: /\b(kids (don't|stopped)|school problems|children (acting|changed))\b/i },
+];
+
+function toggleMic(side) {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) {
+    toast("Live mic requires Chrome or Edge. Not available in this browser.", "warn", 4000);
+    return;
+  }
+  if (state.liveMicActive) {
+    const sameSide = state.liveMicSide === side;
+    stopLiveMic();
+    if (sameSide) return;   // tapping the active button just stops it
+  }
+  if (state.flow !== "live") {
+    toast("Complete the consent flow before activating live mic.", "warn");
+    return;
+  }
+  const lang = side === "worker"
+    ? (state.workerMicLang   || "en-US")
+    : (state.survivorMicLang || "so-SO");
+  startLiveMic(SR, side, lang);
+}
+
+function startLiveMic(SR, side, lang) {
+  state.liveMicSide = side;
+  _recognition = new SR();
+  _recognition.continuous = true;
+  _recognition.interimResults = true;
+  _recognition.lang = lang;
+  _recognition.maxAlternatives = 1;
+
+  _recognition.onstart = () => {
+    state.liveMicActive = true;
+    render();
+    const label = side === "worker" ? "Worker" : "Survivor";
+    toast(`${label} mic active (${lang}) — speak now`, "ok");
+  };
+
+  // Accumulate every isFinal result for this session so long sentences
+  // aren't truncated to just the latest fragment.
+  _recognition._accFinals = [];
+  _recognition._lastResultAt = Date.now();
+
+  _recognition.onresult = (event) => {
+    _recognition._lastResultAt = Date.now();
+    const results = Array.from(event.results);
+    let interim = "";
+    // event.resultIndex is the start of new (unprocessed) results.
+    for (let i = event.resultIndex; i < results.length; i++) {
+      const r = results[i];
+      const txt = (r[0] && r[0].transcript || "").trim();
+      if (!txt) continue;
+      if (r.isFinal) {
+        _recognition._accFinals.push(txt);
+      } else {
+        interim = (interim ? interim + " " : "") + txt;
+      }
+    }
+    const accumulated = _recognition._accFinals.join(" ");
+    const speakerText = (accumulated + (interim ? " " + interim : "")).trim();
+
+    // Speaker pane shows live caption (final + interim).
+    if (speakerText) {
+      if (side === "worker") $("worker-text").textContent   = speakerText;
+      else                   $("survivor-text").textContent = speakerText;
+    }
+
+    // Only dispatch translation/cluster work when at least one final segment
+    // arrived since the last dispatch. We use _lastDispatchedFinalsLen to
+    // avoid re-translating the same accumulated text on every interim event.
+    const finalsLen = _recognition._accFinals.length;
+    if (finalsLen > (_recognition._lastDispatchedFinalsLen || 0)) {
+      _recognition._lastDispatchedFinalsLen = finalsLen;
+      const toDispatch = accumulated;
+      // Schedule async so onresult returns quickly.
+      Promise.resolve().then(() => processLiveTranscript(toDispatch, side));
+    }
+  };
+
+  _recognition.onerror = (e) => {
+    if (e.error === "no-speech") return;
+    if (e.error === "aborted")   return;
+    if (e.error === "network") {
+      toast("Mic: browser speech service unreachable. Check internet.", "warn", 4000);
+    } else if (e.error === "not-allowed" || e.error === "service-not-allowed") {
+      toast("Mic blocked. Click the URL bar lock icon → allow microphone, then retry.", "warn", 6000);
+    } else if (e.error === "audio-capture") {
+      toast("No microphone detected on this device.", "warn", 4000);
+    } else {
+      toast("Mic: " + e.error, "warn");
+    }
+    stopLiveMic();
+  };
+
+  _recognition.onend = () => {
+    if (state.liveMicActive) {
+      // Auto-restart so long pauses don't kill the session. Reset accumulators
+      // so a new utterance starts fresh.
+      _recognition._accFinals = [];
+      _recognition._lastDispatchedFinalsLen = 0;
+      try { _recognition.start(); } catch (_) {}
+    }
+  };
+
+  _recognition.start();
+
+  // Watchdog: if 12s pass with no result, force a restart. Some browsers
+  // silently freeze the recognizer mid-stream; this defeats that.
+  if (_recognition._watchdog) clearInterval(_recognition._watchdog);
+  _recognition._watchdog = setInterval(() => {
+    if (!state.liveMicActive) return;
+    const idleMs = Date.now() - (_recognition._lastResultAt || 0);
+    if (idleMs > 12000) {
+      try { _recognition.abort(); } catch (_) {}
+      // onend will restart it.
+      _recognition._lastResultAt = Date.now();
+    }
+  }, 4000);
+}
+
+function stopLiveMic() {
+  state.liveMicActive = false;
+  state.liveMicSide   = null;
+  if (_recognition) {
+    try { _recognition.abort(); } catch (_) {}
+    _recognition = null;
+  }
+  render();
+  toast("Live mic stopped", "ok");
+}
+
+async function processLiveTranscript(text, side) {
+  if (!text || !text.trim()) return;
+  // Determine the source language strictly from which mic is active.
+  // Worker mic = English (en); client/survivor mic = Somali (so).
+  // The mic-lang selectors only swap within “simulation” mode; the active
+  // side dictates the canonical direction.
+  const micLang = side === "worker"
+    ? (state.workerMicLang   || "en-US")
+    : (state.survivorMicLang || "so-SO");
+  const fromLang = side === "worker"
+    ? (micLang.startsWith("so") ? "so" : "en")
+    : (micLang.startsWith("en") ? "en" : "so");
+
+  // Show “translating…” on the listener side immediately so the UI never
+  // mirrors the source language while we wait for the LLM to respond.
+  const TRANSLATING = "(translating…)";
+  const FAIL        = "(translation unavailable — check translate proxy)";
+
+  if (side === "worker") {
+    state.speakingDirection = "worker_to_survivor";
+    setWorkerText(text, "live mic");
+    setSurvivorText(TRANSLATING, "");
+  } else {
+    state.speakingDirection = "survivor_to_worker";
+    setSurvivorText(text, "");
+    setWorkerText(TRANSLATING, "live MT");
+  }
+
+  // Resolve translation: phrase-table fast path, then LLM proxy.
+  let translated = null;
+  let matched = "none";
+  let source = "none";
+  try {
+    const r = await translateText(text, fromLang);
+    translated = r.translated;
+    matched    = r.matched;
+    source     = r.source;
+  } catch (e) {
+    log("TRANSLATE_THROW " + (e && e.message ? e.message : String(e)));
+  }
+
+  // Render translation on the listener side. Never write the source-language
+  // text into the listener pane — if translation failed, surface a clear
+  // “unavailable” notice so it’s obvious that MT is offline rather than
+  // silently mirroring the source.
+  if (side === "worker") {
+    if (translated) {
+      setSurvivorText(translated, source === "phrase-table" ? "" : "live MT");
+      // Speak the Somali translation through the phone TTS.
+      if (fromLang === "en") speakSomali(translated);
+    } else {
+      setSurvivorText(FAIL, "");
+    }
+  } else {
+    if (translated) {
+      setWorkerText(translated, source === "phrase-table" ? "" : "live MT");
+    } else {
+      setWorkerText(FAIL, "live MT");
+    }
+  }
+
+  log(`LIVE_MIC side=${side} from=${fromLang} matched=${matched} source=${source}`);
+
+  // Capture verbatim if armed (uses true source + best-effort translation)
+  if (state.captureNext) {
+    state.verbatim.push({
+      so: fromLang === "so" ? text : (translated || ""),
+      en: fromLang === "en" ? text : (translated || ""),
+      ts: new Date().toLocaleTimeString(),
+    });
+    state.captureNext = false;
+    state.recordingMode = "ephemeral";
+    toast("Verbatim captured", "ok");
+  }
+
+  // Run trigger/cluster engine on whichever-language patterns apply.
+  const directTags = [];
+  const inferIds   = [];
+  PACK.directTriggers.forEach((t) => {
+    if (t.pattern.test(text)) directTags.push(t.tag);
+  });
+  EN_DIRECT.forEach((t) => {
+    if (t.re.test(text) && !directTags.includes(t.tag)) directTags.push(t.tag);
+  });
+  PACK.inferentialSignals.forEach((s) => {
+    if (s.pattern.test(text)) inferIds.push(s.id);
+  });
+  EN_INFERENTIAL.forEach((s) => {
+    if (s.re.test(text) && !inferIds.includes(s.id)) inferIds.push(s.id);
+  });
+
+  // IMPORTANT: do NOT call playUtterance() here. It re-renders both panes
+  // from u.so / u.en and would clobber the translated text we just set
+  // (this was the bug that made both sides show the same English/Somali
+  // string when no canonical pack match existed). Just route triggers and
+  // call the engine’s side-effect functions directly if needed.
+  if (typeof updateClusters === "function") {
+    updateClusters({ so: fromLang === "so" ? text : (translated || ""),
+                     en: fromLang === "en" ? text : (translated || ""),
+                     direct: directTags, inference: inferIds });
+  }
+  log("LIVE_MIC_UTTERANCE direct=" + directTags.join(",") + " infer=" + inferIds.join(","));
+}
+
+// Worker note dictation — uses real SpeechRecognition when available.
+const WORKER_DICTATIONS_FALLBACK = [
+  "Survivor declined SFSTF referral; prefers ReWA. Confirm protective-order timeline at next visit.",
+  "Survivor staying with cousin in Kent; not safe for letters at home address.",
+  "Children currently with maternal aunt during school hours; pickup at 14:30.",
+  "Survivor asked about halal food bank near Tukwila; Rainier Valley FB confirmed.",
+];
+
+function dictateNote() {
+  if (state.flow !== "live") {
+    toast("Begin the consent flow + confirm \"consent given\" first.", "warn");
+    return;
+  }
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) {
+    _dictateNoteFallback();
+    return;
+  }
+  const r = new SR();
+  r.lang = "en-US";
+  r.interimResults = false;
+  r.onresult = (e) => {
+    const text = e.results[0][0].transcript.trim();
+    if (!text) return;
+    const ta = $("caseworker-notes");
+    const stamp = new Date().toLocaleTimeString();
+    ta.value = (ta.value.trim() ? ta.value + "\n" : "") + `[${stamp}] ${text}`;
+    state.notes = ta.value;
+    toast("Note added", "ok");
+    log("NOTE_DICTATED_LIVE");
+  };
+  r.onerror = () => _dictateNoteFallback();
+  r.start();
+  toast("Listening for note… speak now", "ok");
+}
+
+function _dictateNoteFallback() {
+  const dict = WORKER_DICTATIONS_FALLBACK[state.dictateCount % WORKER_DICTATIONS_FALLBACK.length];
+  state.dictateCount++;
+  const ta = $("caseworker-notes");
+  const stamp = new Date().toLocaleTimeString();
+  ta.value = (ta.value.trim() ? ta.value + "\n" : "") + `[${stamp}] ${dict}`;
+  state.notes = ta.value;
+  toast("Note added (simulated)", "ok");
+  log("NOTE_DICTATED_SIMULATED");
+}
+
+function renderVerbatim() {
+  const list = $("verbatim-list");
+  if (!state.verbatim.length) {
+    list.innerHTML =
+      '<div class="verbatim-item" style="border-style:dashed; color: var(--muted);">' +
+      '(no captures yet — press <em>capture verbatim</em> on worker side, then click an utterance)' +
+      '</div>';
+    return;
+  }
+  list.innerHTML = state.verbatim.map((q, i) => `
+    <div class="verbatim-item">
+      <div class="so">${i + 1}. ${escapeHtml(q.so)}</div>
+      <div class="en">${escapeHtml(q.en)}</div>
+      <div class="ts">captured ${q.ts}</div>
+    </div>
+  `).join("");
+}
+
+function renderAttached() {
+  const list = $("res-attached-list");
+  if (!state.attachedResources.length) {
+    list.innerHTML =
+      '<div class="res-attached-item" style="border-style:dashed; color: var(--muted);">' +
+      '(none — attach from controls pane)' +
+      '</div>';
+    return;
+  }
+  // Each attached resource shows the worker a delivery-method chip row.
+  // The chosen method governs HOW the survivor actually receives the info
+  // (per caseworker-behaviors.md §9 — soft warm referrals only).
+  list.innerHTML = state.attachedResources.map((r, i) => {
+    const delivery = r.delivery || null;
+    const deliveryLine = delivery
+      ? `<div style="margin-top:4px; font-size:10px; color:var(--accent);">delivered · ${escapeHtml(delivery)} @ ${escapeHtml(r.deliveryTs || "")}</div>`
+      : `<div style="margin-top:4px; font-size:10px; color:var(--muted);">choose delivery method (jointly with survivor):</div>`;
+    const chips = delivery ? "" : `
+      <div style="display:flex; gap:4px; flex-wrap:wrap; margin-top:4px;">
+        <button class="chip" onclick="deliverResource(${i}, 'read-aloud')"   title="MMS-TTS-som plays Somali to phone speaker; survivor reads along on her side">read aloud</button>
+        <button class="chip" onclick="deliverResource(${i}, 'print-card')"   title="Generate a Somali-language paper card the survivor can take">print card</button>
+        <button class="chip" onclick="deliverResource(${i}, 'sms-opt-in')"   title="ONLY if survivor confirms her phone is safe">SMS (opt-in)</button>
+        <button class="chip" onclick="deliverResource(${i}, 'warm-call')"    title="Worker dials, hands phone to survivor, sits with her">warm-call now</button>
+        <button class="chip" onclick="deliverResource(${i}, 'declined')"     title="Survivor said no — logged for worker's notes only">declined</button>
+      </div>`;
+    return `
+      <div class="res-attached-item">
+        <div class="name">${escapeHtml(r.name)}</div>
+        <div class="meta">${escapeHtml(r.phone)} · ${escapeHtml((r.languages||[]).join(", "))} · ${escapeHtml(r.area)}</div>
+        ${deliveryLine}
+        ${chips}
+      </div>
+    `;
+  }).join("");
+}
+
+function deliverResource(idx, method) {
+  const r = state.attachedResources[idx];
+  if (!r) return;
+  r.delivery = method;
+  r.deliveryTs = new Date().toLocaleTimeString();
+
+  // Each method has a different SURVIVOR-FACING action.
+  // (Production: routes through the corresponding hardware path — TTS,
+  // printer driver, SMS API w/ safety check, dialer, or notes-only log.)
+  if (method === "read-aloud") {
+    const so = `${r.name}. Lambarka taleefoonka: ${r.phone}.`;
+    setSurvivorText(so, "");
+    setWorkerText(`Reading aloud: ${r.name} · ${r.phone}`, "Survivor hears Somali audio + reads along on her side.");
+    state.speakingDirection = "worker_to_survivor";
+    speakSomali(so);
+    toast(`Read aloud to survivor: ${r.name}`, "ok");
+  } else if (method === "print-card") {
+    setSurvivorText(`Kaarka warbixinta: ${r.name}`, `${r.phone} · ${r.area}`);
+    setWorkerText(`Print card: ${r.name}`, "Clinic printer queued — survivor takes a physical card.");
+    toast(`Card queued for print: ${r.name}`, "ok");
+  } else if (method === "sms-opt-in") {
+    setSurvivorText(`Lambarkaaga ma ammaan baa? Ma rabtaa SMS?`, `Is your phone safe? Would you like an SMS?`);
+    setWorkerText(`SMS — waiting on safety check`, "Survivor confirms her phone is safe before receiving SMS.");
+    toast(`SMS option · waiting on safety check`, "warn");
+  } else if (method === "warm-call") {
+    setSurvivorText(`Waxaan u wacayaa ${r.name}…`, `${r.phone}`);
+    setWorkerText(`Dialing ${r.name} · ${r.phone}`, "Worker hands phone to survivor; sits with her during the call.");
+    toast(`Warm-call placed: ${r.name}`, "ok");
+  } else if (method === "declined") {
+    setWorkerText(`Survivor declined: ${r.name}`, "Logged for worker's notes only; nothing delivered.");
+    toast(`Declined: ${r.name} (logged only)`, "warn");
+  }
+
+  log(`RESOURCE_DELIVER ${r.name} via ${method}`);
+  render();
+}
+
+function renderChips() {
+  const presenting = $("presenting-chips");
+  presenting.innerHTML = PACK.intakeFieldOptions.presenting_issue.map((tag) => {
+    const sel = state.presentingIssues.has(tag);
+    return `<span class="chip${sel ? " selected" : ""}" data-tag="${tag}"
+                  onclick="toggleIntake('presenting', '${tag}')">${tag}</span>`;
+  }).join("");
+
+  const safety = $("safety-chips");
+  safety.innerHTML = PACK.intakeFieldOptions.safety_flags.map((tag) => {
+    const sel = state.safetyFlags.has(tag);
+    return `<span class="chip warn${sel ? " selected" : ""}" data-tag="${tag}"
+                  onclick="toggleIntake('safety', '${tag}')">${tag}</span>`;
+  }).join("");
+}
+
+function toggleIntake(group, tag) {
+  const set = group === "presenting" ? state.presentingIssues : state.safetyFlags;
+  if (set.has(tag)) set.delete(tag); else set.add(tag);
+  log(`INTAKE_${group.toUpperCase()}_${set.has(tag) ? "ADD" : "REMOVE"} ${tag}`);
+  render();
+}
+
+function setHud(captionText, signalText, signalClass) {
+  setText("hud-caption", captionText);
+  const sig = $("hud-signal");
+  sig.className = "signal " + (signalClass || "notice");
+  sig.innerHTML = signalText || "";
+}
+
+function setSurvivorText(soText, smallText) {
+  $("survivor-text").innerHTML =
+    `${escapeHtml(soText)}<span class="small">${smallText || ""}</span>`;
+}
+function setWorkerText(enText, smallText) {
+  $("worker-text").innerHTML =
+    `${escapeHtml(enText)}<span class="small">${smallText || ""}</span>`;
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"]/g, (c) => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;",
+  }[c]));
+}
+
+// -- FLOWS ---------------------------------------------------------------
+
+function genUuid() {
+  return "demo-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 8);
+}
+
+function beginConsent() {
+  state.flow = "consent";
+  state.recordingMode = "ephemeral";
+  // Consent script is the SYSTEM speaking on the worker's behalf to the
+  // survivor — worker_to_survivor direction. Split-screen renders.
+  state.speakingDirection = "worker_to_survivor";
+  state.uuid = genUuid();
+  state.startedAt = new Date().toISOString();
+  state.goal = state.goal || PACK.sessionBrief.goal;
+
+  setHud(
+    "Consent script playing on phone speaker (Somali, ~25 s).",
+    "Waiting for survivor to confirm. Coaching: do not begin translation until \"Hope, consent given\".",
+    "notice"
+  );
+  setSurvivorText(
+    "Salaan. Sirta waa la ilaaliyaa.",
+    "Wax aan diyaarsanahay inaan ku caawiyo, laakiin ma ihi qof Soomaali ah, ma ihi ciidan, ma ihi qof masjidka ka tirsan, ma ihi qof ka shaqeeya socdaalka. Codkaaga lama duubo. Hadaad rabto inaan istaajiyo, dheh \"jooji\". Hadaad rabto qof Soomaali ah oo aan magaalo kale ka yimid taleefoonka soo galo, dheh \"qof\". Hadaad rabto inaan tirtiro wax kasta, dheh \"tirtir\". Mahadsanid."
+  );
+  setWorkerText(
+    "Hello. The secret is kept.",
+    "I am here to help, but I am not a Somali person, not police, not someone from the mosque, not someone who works in immigration. Your voice is not recorded. Say jooji to stop, qof for a Somali person from another city by phone, tirtir to erase. Thank you."
+  );
+  speakSomali(PACK.voiceScripts.consentInPerson.somali);
+  toast("Consent script playing. Press \"Mark consent given\" when survivor responds.", "warn", 3000);
+  render();
+  log("CONSENT_FLOW_BEGIN");
+}
+
+function confirmConsent() {
+  if (state.flow !== "consent") {
+    setHud("Cannot confirm consent — start the consent flow first.",
+      "Press \"Begin consent flow\" then play the Somali script for the survivor.", "warn");
+    return;
+  }
+  state.flow = "live";
+  // After consent: default direction is survivor_to_worker (we're listening).
+  // Either side can take a turn; the demo's two action buttons drive each.
+  state.speakingDirection = "survivor_to_worker";
+  setHud(
+    "Live translation active.",
+    "Click any survivor utterance below to play it. Watch the cluster engine on the right and the coaching cues here.",
+    "notice"
+  );
+  setSurvivorText(
+    "Sii hadla — waan ku dhageysanayaa.",
+    "Continue — I am listening."
+  );
+  setWorkerText(
+    "Live translation active.",
+    "Click a canned utterance in the controls pane to play one through the system."
+  );
+  toast("Consent given. Live translation is now active.", "ok");
+  render();
+  log("CONSENT_GIVEN");
+}
+
+function playUtterance(u) {
+  if (state.flow !== "live") {
+    setHud("Cannot play utterance yet.",
+      "Begin the consent flow and confirm \"consent given\" first.", "warn");
+    return;
+  }
+
+  // Survivor is speaking → both sides render content per the trust principle.
+  // Survivor side shows the live Somali ASR transcript so SHE can verify the
+  // system heard her correctly. Worker side shows the live English MT.
+  state.speakingDirection = "survivor_to_worker";
+
+  // Render captions on the tabletop (NEVER notes — captions only)
+  setSurvivorText(u.so, "");
+  setWorkerText(u.en, "");
+
+  // Capture verbatim if armed
+  if (state.captureNext) {
+    state.verbatim.push({
+      so: u.so,
+      en: u.en,
+      ts: new Date().toLocaleTimeString(),
+    });
+    state.captureNext = false;
+    state.recordingMode = "ephemeral";
+    toast(`Verbatim captured: "${u.so.slice(0, 60)}…"`, "ok");
+  }
+
+  // Update cluster
+  (u.inference || []).forEach((id) => state.inferential.add(id));
+  (u.direct || []).forEach((d) => state.direct.add(d));
+
+  // Build coach output for the HUD (glasses-only)
+  const hits = [];
+
+  if (u.direct) {
+    u.direct.forEach((tag) => {
+      const t = PACK.directTriggers.find((t) => t.tag === tag);
+      if (t) {
+        const icon = t.tier === "red" ? "⛑" : t.tier === "amber" ? "⚠" : "◇";
+        hits.push({
+          tier: t.tier,
+          html: `<div class="row">${icon} <strong>${t.id}</strong> · ${t.coach}</div>`,
+        });
+        // Auto-suggest a structured note for the worker to confirm.
+        // Direct triggers are documentation-worthy; the worker still confirms.
+        suggestNote(
+          `direct trigger · ${t.id}`,
+          `${t.tag} (${t.tier}) · "${u.so}" — confirm w/ survivor before documenting`
+        );
+        // Auto-propose structured tags inferred from the trigger
+        suggestTagsFor(t.tag, t.id);
+      }
+    });
+  }
+
+  if (u.inference) {
+    u.inference.forEach((id) => {
+      const s = PACK.inferentialSignals.find((x) => x.id === id);
+      if (s) {
+        hits.push({
+          tier: "blue",
+          html: `<div class="row">◇ <strong>${s.id}</strong> · noticed: ${s.note} → ${s.coach}</div>`,
+        });
+        // Propose described_* tags from inferential signals (never confirmed_*)
+        suggestTagsFor(s.id, s.id);
+      }
+    });
+  }
+
+  // Cluster promotion message (also glasses-only). Per
+  // caseworker-behaviors.md §11.4, the would-you-want frame is the
+  // response to accumulated inferential disclosure — so we surface it
+  // at Probable (2 inferential) and reinforce at Probable+ / elevated.
+  const tier = computeTier();
+  const isElevated = tier.startsWith("elevated") || tier.startsWith("Probable+");
+  if (tier === "Probable" || isElevated) {
+    const headline = isElevated
+      ? "<strong>⚠ Would-you-want frame · elevated.</strong> "
+      : "<strong>⚠ Probable cluster · would-you-want frame.</strong> ";
+    hits.unshift({
+      tier: "amber",
+      html:
+        '<div class="row">' + headline +
+        "Reflect tentatively. Ask permission to explore. Do not label. Suggested reflection (Somali ▸ English):<br>" +
+        `<em>${escapeHtml(PACK.voiceScripts.wouldYouWant.somali)}</em><br>` +
+        `<span style="color:var(--muted);">${escapeHtml(PACK.voiceScripts.wouldYouWant.english)}</span></div>`,
+    });
+    // Suggest a coaching-only note (NEVER an auto-label of abuse)
+    const sigs = significantInferential().join(", ");
+    suggestNote(
+      "cluster · would-you-want frame",
+      `Cluster ${tier}. Reflected w/ would-you-want frame; signals=${sigs}; described_* only · no confirmed_* fields.`
+    );
+  }
+
+  // Choose a single signal class for the HUD frame
+  let signalClass = "notice";
+  if (hits.some((h) => h.tier === "red")) signalClass = "red";
+  else if (hits.some((h) => h.tier === "amber")) signalClass = "warn";
+
+  const html = hits.length
+    ? hits.map((h) => h.html).join("")
+    : '<div class="row">No triggers fired. Continue listening.</div>';
+
+  setHud(`Caption: ${u.en}`, html, signalClass);
+  speakSomali(u.so);
+  render();
+  log(`UTTERANCE ${u.id} · direct=${(u.direct||[]).length} · inference=${(u.inference||[]).length}`);
+}
+
+function workerSpeak() {
+  if (state.flow !== "live" && state.flow !== "consent") {
+    toast("Begin the consent flow first.", "warn");
+    return;
+  }
+  if (state.flow === "consent") {
+    toast("Mark consent given before live worker turns.", "warn");
+    return;
+  }
+  const u = PACK.workerUtterances[state.workerUtteranceIdx % PACK.workerUtterances.length];
+  state.workerUtteranceIdx++;
+  state.speakingDirection = "worker_to_survivor";
+
+  // Both sides render: worker English (her own words) + Somali (translated to survivor)
+  setWorkerText(u.en, "");
+  setSurvivorText(u.so, "");
+
+  // Glassesside coaching cue is monochrome + symbol-only — never colored
+  setHud(
+    `Worker turn: ${u.en}`,
+    `<div class="row">→ Somali rendering on survivor side: <em>${escapeHtml(u.so)}</em></div>` +
+    (u.en === "consent" || u.en === "confidential"
+      ? `<div class="row">◇ Glossary rewrite applied · culturally accurate rendering</div>`
+      : ''),
+    "notice"
+  );
+
+  // Survivor-facing Somali audio · MMS-TTS-som path in production
+  speakSomali(u.so);
+  toast(`Worker speaking: "${u.en}" → ${u.so.slice(0, 50)}…`, "ok");
+  render();
+  log(`WORKER_SPEAK ${u.id}`);
+}
+
+function captureVerbatim() {
+  if (state.flow !== "live") {
+    setHud(
+      "Capture verbatim requires LIVE state.",
+      "Begin consent flow + confirm first.",
+      "warn"
+    );
+    return;
+  }
+  state.captureNext = true;
+  state.recordingMode = "capturing";
+  setHud(
+    "CAPTURING — next utterance will be saved verbatim.",
+    "<strong>Red dot active.</strong> Survivor sees the red ring on the phone. Click any survivor utterance to capture it; the dot returns to green afterward.",
+    "red"
+  );
+  toast("Capture armed. Click any utterance to record it verbatim.", "warn");
+  render();
+  log("CAPTURE_VERBATIM_ARMED");
+}
+
+function lookupResources(category) {
+  const out = $("resource-output");
+  const items = PACK.resources[category] || [];
+  out.innerHTML = items.map((r, i) => {
+    const isAttached = state.attachedResources.some((a) => a.name === r.name);
+    return `
+      <div class="resource-card">
+        <div class="name">${escapeHtml(r.name)}</div>
+        <div class="meta">${escapeHtml(r.phone)} · ${escapeHtml((r.languages||[]).join(", "))} · ${escapeHtml(r.area)}</div>
+        <div class="desc">${escapeHtml(r.description)}</div>
+        <button class="attach${isAttached ? " attached" : ""}"
+                onclick="attachResource('${category}', ${i})">
+          ${isAttached ? "✓ attached" : "+ add to notes"}
+        </button>
+      </div>
+    `;
+  }).join("");
+  setHud(
+    `Resources: ${category.replace("_", " ")}`,
+    "Top 3 from bundled JSON. Click <em>+ add to notes</em> to attach to this case (HUD-only · included in PDF export).",
+    "notice"
+  );
+  log(`RESOURCE_LOOKUP ${category}`);
+}
+
+function attachResource(category, idx) {
+  const r = PACK.resources[category][idx];
+  if (!r) return;
+  if (state.attachedResources.some((a) => a.name === r.name)) {
+    state.attachedResources = state.attachedResources.filter((a) => a.name !== r.name);
+    state.requestedResources.delete(category);
+    toast(`Removed: ${r.name}`, "warn");
+  } else {
+    state.attachedResources.push(r);
+    state.requestedResources.add(category);
+    toast(`Attached: ${r.name}`, "ok");
+  }
+  lookupResources(category);   // re-render the card list to update button state
+  render();
+  log(`RESOURCE_ATTACH ${category} ${r.name}`);
+}
+
+function closeSession() {
+  if (state.flow === "idle" || state.flow === "closed") {
+    setHud("No live session.", "Begin a session first.", "warn");
+    return;
+  }
+
+  // Pull free-text + goal from the textarea inputs (HUD-only DOM)
+  state.notes = $("caseworker-notes").value.trim();
+  state.goal  = $("goal-input").value.trim() || state.goal;
+
+  let filename;
+  try {
+    filename = window.HishmoPdfExport.exportSession({
+      ...state,
+      presentingIssues: [...state.presentingIssues],
+      safetyFlags: [...state.safetyFlags],
+      requestedResources: [...state.requestedResources],
+    });
+  } catch (e) {
+    console.error(e);
+    toast("PDF export failed: " + e.message, "error", 4000);
+    return;
+  }
+
+  state.flow = "closed";
+  state.recordingMode = "none";
+  setHud(
+    "Session closed. PDF exported locally.",
+    `<strong>${escapeHtml(filename)}</strong> downloaded to your machine. ` +
+      "No cloud egress. In-memory state cleared on next action.",
+    "notice"
+  );
+  setSurvivorText(
+    "Waanu dhamaynay.",
+    "Waxa la xafiday qoraalka shaqaalaha. Codkaagu ma jirayo. Ma jiro wax la diray. Mahadsanid."
+  );
+  setWorkerText(
+    "Session closed.",
+    "Local PDF saved to your downloads folder. Worker shares with case-management system manually. No cloud."
+  );
+  toast(`Exported. Local file only. No cloud. (${filename})`, "ok", 3500);
+  render();
+  log("SESSION_CLOSE");
+}
+
+function panicClear() {
+  // Stop live mic before wiping state
+  if (state.liveMicActive) stopLiveMic();
+
+  const overlay = $("panic-overlay");
+  overlay.classList.add("show");
+
+  log("PANIC_CLEAR_BEGIN");
+
+  // Wipe in-memory state
+  setHud(
+    "PANIC CLEAR — wiping…",
+    "All volatile state and the export bundle are being wiped. Glasses HUD will blank. Phone shows green \"no record\".",
+    "warn"
+  );
+
+  setTimeout(() => {
+    // Replace state object — keep panic clear under 2 s
+    const fresh = newState();
+    Object.keys(state).forEach((k) => delete state[k]);
+    Object.assign(state, fresh);
+
+    // Wipe DOM-resident inputs (the textareas live in the DOM, not state)
+    $("caseworker-notes").value = "";
+    $("goal-input").value = "";
+    $("glossary-input").value = "";
+    $("glossary-output").textContent = "(nothing yet)";
+    $("resource-output").innerHTML = "";
+
+    setSurvivorText(
+      "Wax walba waa la tirtiray.",
+      "Ma jiro wax la xafiday."
+    );
+    setWorkerText(
+      "PANIC CLEAR complete.",
+      "All volatile transcripts and the export bundle wiped. Key vault re-initialized in <2 s."
+    );
+    setHud(
+      "Idle.",
+      "Wipe complete. Open Hishmo on glasses to begin a new session.",
+      "notice"
+    );
+    toast("Panic clear complete. All state wiped.", "ok");
+    render();
+    log("PANIC_CLEAR_DONE");
+
+    setTimeout(() => overlay.classList.remove("show"), 200);
+  }, 1200);
+}
+
+function survivorCommand(cmd) {
+  if (cmd === "jooji") {
+    setHud(
+      "Survivor said *jooji* — pausing.",
+      "Mic muted. HUD blanked. Worker re-asks consent before resuming.",
+      "warn"
+    );
+    state.recordingMode = "none";
+    toast("Survivor: jooji (pause). Mic muted.", "warn");
+    render();
+    log("SURVIVOR_JOOJI");
+  } else if (cmd === "qof") {
+    const city =
+      PACK.interpreterCities[Math.floor(Math.random() * PACK.interpreterCities.length)];
+    const offerSo = PACK.voiceScripts.interpreterHandoff.somali
+      .replace("{CITY}", city).replace("{NAME}", "Hodan A.");
+    const offerEn = PACK.voiceScripts.interpreterHandoff.english
+      .replace("{CITY}", city).replace("{NAME}", "Hodan A.");
+    setHud(
+      `Survivor said *qof* — surfacing out-of-region interpreter (${city}).`,
+      `<div class="row"><strong>Somali:</strong> ${escapeHtml(offerSo)}</div>` +
+      `<div class="row" style="color:var(--muted);">${escapeHtml(offerEn)}</div>` +
+      `<div class="row" style="color:var(--muted);">Geography is the trust signal · never Seattle.</div>`,
+      "notice"
+    );
+    toast(`Survivor: qof. Offer interpreter from ${city}.`, "warn", 3500);
+    log(`SURVIVOR_QOF ${city}`);
+  } else if (cmd === "tirtir") {
+    setHud(
+      "Survivor said *tirtir* — confirm panic clear?",
+      "Worker confirms, then everything wipes. (Demo auto-confirms in 1 s.)",
+      "warn"
+    );
+    toast("Survivor: tirtir. Auto-confirming panic clear in 1 s…", "warn");
+    log("SURVIVOR_TIRTIR_REQ");
+    setTimeout(panicClear, 1000);
+  }
+}
+
+function renderGlossary() {
+  const v = $("glossary-input").value.trim().toLowerCase();
+  const out = PACK.glossaryIntercepts[v];
+  if (out) {
+    $("glossary-output").textContent = out;
+  } else if (v.length === 0) {
+    $("glossary-output").textContent = "(nothing yet)";
+  } else {
+    $("glossary-output").textContent =
+      "(no rewrite needed for this term)";
+  }
+}
+
+function resetDemo() {
+  if (state.liveMicActive) stopLiveMic();
+  const fresh = newState();
+  Object.keys(state).forEach((k) => delete state[k]);
+  Object.assign(state, fresh);
+  $("caseworker-notes").value = "";
+  $("goal-input").value = "";
+  $("glossary-input").value = "";
+  $("glossary-output").textContent = "(nothing yet)";
+  $("resource-output").innerHTML = "";
+  setHud("Idle.", "Ready for next session.", "notice");
+  setSurvivorText(
+    "Soo dhowoow.",
+    "Hishmo wuxuu diyaar u yahay inuu ku caawiyo."
+  );
+  setWorkerText(
+    "Welcome.",
+    "Press \"Begin consent flow\" to start."
+  );
+  toast("Demo state reset.", "ok");
+  render();
+}
+
+// -- Browser SpeechSynthesis (Somali if available; else neutral fallback)
+
+function speakSomali(text) {
+  try {
+    if (!window.speechSynthesis) return;
+    window.speechSynthesis.cancel();
+    const voices = window.speechSynthesis.getVoices();
+    const soVoice = voices.find((v) => v.lang && v.lang.toLowerCase().startsWith("so"));
+    // Chrome silently truncates utterances over ~200 chars; split on paragraph
+    // boundaries so the full consent script plays without cutting off.
+    const chunks = text.split(/\n\n+/).map((s) => s.trim()).filter(Boolean);
+    function speakChunk(i) {
+      if (i >= chunks.length) return;
+      const utt = new SpeechSynthesisUtterance(chunks[i]);
+      utt.lang = "so-SO";
+      utt.rate = 0.9;
+      utt.pitch = 1.0;
+      if (soVoice) utt.voice = soVoice;
+      utt.onend = () => speakChunk(i + 1);
+      window.speechSynthesis.speak(utt);
+    }
+    speakChunk(0);
+  } catch (e) { /* silent */ }
+}
+
+// -- Privacy logger (no message bodies) ----------------------------------
+
+function log(event) {
+  const entry = {
+    ts: new Date().toISOString(),
+    sessionUuid: state.uuid,
+    event,
+    flow: state.flow,
+    inferentialCount: state.inferential.size,
+    directCount: state.direct.size,
+    tier: computeTier(),
+  };
+  state.history.push(entry);
+  console.log("[hishmo]", entry);
+}
+
+// -- Init ----------------------------------------------------------------
+
+function renderUtteranceList() {
+  const container = $("utterance-list");
+  container.innerHTML = PACK.cannedUtterances.map((u, i) => {
+    const tag = (u.direct && u.direct.length)
+      ? `<span style="color:var(--red);">DIRECT ×${u.direct.length}</span>`
+      : (u.inference && u.inference.length)
+        ? `<span style="color:var(--accent);">inferential ×${u.inference.length}</span>`
+        : `<span style="color:var(--muted);">neutral</span>`;
+    const cls = (u.direct && u.direct.length) ? "btn warn" : "btn";
+    return `<button class="${cls}" onclick="playUtterance(window.HishmoSomaliPack.cannedUtterances[${i}])">
+      <strong>${escapeHtml(u.label)}</strong>
+      <small>${escapeHtml(u.so)} · ${tag}</small>
+    </button>`;
+  }).join("");
+}
+
+renderUtteranceList();
+render();
+log("DEMO_LOAD");
+
+// Pre-warm voices for browsers that lazy-load
+if (window.speechSynthesis) {
+  window.speechSynthesis.onvoiceschanged = () => {};
+  window.speechSynthesis.getVoices();
+}
+</script>
+</body>
+</html>
